@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Panel de revisión — Chatbot</title>
+<link rel="stylesheet" href="./admin.css">
+</head>
+<body>
+    <header class="topbar">
+        <h1>Panel de revisión <span>· chatbot local</span></h1>
+        <button class="btn-ghost" id="btn-logout">Cerrar sesión</button>
+    </header>
+
+    <div class="container">
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="pendientes">Pendientes <span id="count-pendientes"></span></button>
+            <button class="tab-btn" data-tab="aprobadas">Aprobadas <span id="count-aprobadas"></span></button>
+        </div>
+
+        <!-- PENDIENTES -->
+        <section class="tab-panel active" id="tab-pendientes">
+            <div id="lista-pendientes"></div>
+        </section>
+
+        <!-- APROBADAS -->
+        <section class="tab-panel" id="tab-aprobadas">
+            <div class="card new-form">
+                <h3>Agregar pregunta/respuesta manual</h3>
+                <input type="text" id="nueva-pregunta" placeholder="Pregunta">
+                <textarea id="nueva-respuesta" placeholder="Respuesta"></textarea>
+                <input type="text" id="nuevos-tags" placeholder="Tags separados por coma (opcional)">
+                <button class="btn-primary" id="btn-agregar-aprobada">Agregar a aprobadas</button>
+            </div>
+            <div id="lista-aprobadas"></div>
+        </section>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script src="./admin.js"></script>
+</body>
+</html>

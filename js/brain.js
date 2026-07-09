@@ -23,6 +23,46 @@ let datos = {
     habData: []
 };
 
+// ================= NIVEL 2/3: BACKEND (caché semántico + modelo local Ollama) =================
+// BACKEND_URL vacío = mismo origen (recomendado: abrir la app desde http://localhost:3000
+// que sirve el backend, así este fetch va al mismo servidor sin problemas de CORS).
+const BACKEND_URL = (typeof window !== 'undefined' && window.BACKEND_URL) ? window.BACKEND_URL : '';
+
+async function consultarBackend(txt) {
+    setAvatar('pensar');
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                pregunta: txt,
+                agente: AGENTE_ACTIVO ? AGENTE_ACTIVO.nombre : null
+            })
+        });
+
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || `Error ${res.status}`);
+        }
+
+        const data = await res.json();
+        hablar(data.respuesta, () => volverAMenu());
+
+        // Aviso discreto cuando la respuesta viene del modelo y está pendiente de revisión
+        if (data.pendiente_revision) {
+            setTimeout(() => {
+                log('SISTEMA', 'ℹ️ Esta respuesta fue generada por IA y quedó pendiente de revisión por un administrador.');
+            }, 350);
+        }
+    } catch (err) {
+        console.error('Error consultando backend:', err);
+        hablar(
+            "No pude conectarme con el asistente de IA local. Verifica que el backend y Ollama estén corriendo, o intenta con: Cotizar, Subir Pago o Facturar.",
+            () => volverAMenu()
+        );
+    }
+}
+
 // ================= CARGA DE DATOS (JSON) =================
 function buscarEnBaseConocimiento(texto) {
     for (let item of BASE_CONOCIMIENTO) {
@@ -351,7 +391,7 @@ function cerebro(txt)
             );
         }
         else {
-            hablar("No entendí. Di Cotizar , Subir Pago o Facturar");
+            consultarBackend(txt);
         }
         return;
     }
@@ -603,4 +643,4 @@ function volverAMenu(delay = 800) {
             () => escuchar()
         );
     }, delay);
-}
+}  

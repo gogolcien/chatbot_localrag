@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Panel de revisión — Login</title>
+<link rel="stylesheet" href="./admin.css">
+</head>
+<body>
+    <div class="login-wrap">
+        <form class="card login-card" id="login-form">
+            <h1>Panel de revisión</h1>
+            <p>Acceso solo para el administrador del chatbot.</p>
+            <div class="error-msg" id="error-msg"></div>
+            <input type="password" id="password" placeholder="Contraseña" autocomplete="current-password" autofocus>
+            <button type="submit" class="btn-primary" style="width:100%">Entrar</button>
+        </form>
+    </div>
+
+    <script>
+        const form = document.getElementById('login-form');
+        const errorMsg = document.getElementById('error-msg');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorMsg.textContent = '';
+            const password = document.getElementById('password').value;
+
+            try {
+                const res = await fetch('/api/admin/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ password })
+                });
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    errorMsg.textContent = data.error || 'No se pudo iniciar sesión.';
+                    return;
+                }
+                window.location.href = './index.html';
+            } catch (err) {
+                errorMsg.textContent = 'Error de conexión con el servidor.';
+            }
+        });
+    </script>
+</body>
+</html>
