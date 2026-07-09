@@ -30,6 +30,7 @@ const BACKEND_URL = (typeof window !== 'undefined' && window.BACKEND_URL) ? wind
 
 async function consultarBackend(txt) {
     setAvatar('pensar');
+    mostrarOverlayProcesando();
     try {
         const res = await fetch(`${BACKEND_URL}/api/chat`, {
             method: 'POST',
@@ -46,6 +47,7 @@ async function consultarBackend(txt) {
         }
 
         const data = await res.json();
+        ocultarOverlayProcesando();
         hablar(data.respuesta, () => volverAMenu());
 
         // Aviso discreto cuando la respuesta viene del modelo y está pendiente de revisión
@@ -55,6 +57,7 @@ async function consultarBackend(txt) {
             }, 350);
         }
     } catch (err) {
+        ocultarOverlayProcesando();
         console.error('Error consultando backend:', err);
         hablar(
             "No pude conectarme con el asistente de IA local. Verifica que el backend y Ollama estén corriendo, o intenta con: Cotizar, Subir Pago o Facturar.",
@@ -169,6 +172,31 @@ function log(user, msg) {
     const align = user === 'BOT' ? 'text-left' : 'text-right';
     box.innerHTML += `<div class="${align}"><span class="${color} font-bold text-xs">${user}</span><br>${msg}</div>`;
     box.scrollTop = box.scrollHeight;
+}
+
+// ================= OVERLAY DE PROCESAMIENTO (pantalla completa) =================
+// Se muestra mientras se espera la respuesta del backend/modelo, para que quede claro
+// que la app sigue trabajando aunque tarde unos segundos. Solo aparece si la respuesta
+// tarda mas de OVERLAY_DELAY_MS: si es un hit de cache semantico (responde casi al
+// instante), nunca llega a mostrarse.
+const OVERLAY_DELAY_MS = 500;
+let overlayTimeoutId = null;
+
+function mostrarOverlayProcesando() {
+    overlayTimeoutId = setTimeout(() => {
+        const overlay = document.getElementById('overlay-procesando');
+        if (overlay) overlay.classList.remove('hidden');
+        overlayTimeoutId = null;
+    }, OVERLAY_DELAY_MS);
+}
+
+function ocultarOverlayProcesando() {
+    if (overlayTimeoutId) {
+        clearTimeout(overlayTimeoutId);
+        overlayTimeoutId = null;
+    }
+    const overlay = document.getElementById('overlay-procesando');
+    if (overlay) overlay.classList.add('hidden');
 }
 
 function hablar(texto, callback)
@@ -643,4 +671,4 @@ function volverAMenu(delay = 800) {
             () => escuchar()
         );
     }, delay);
-}  
+}

@@ -71,6 +71,24 @@
             </button>
         </div>
 
+        <!-- Overlay de "procesando": cubre casi toda la pantalla mientras se espera
+             la respuesta del modelo (nivel 3). Oculto por defecto. -->
+        <div id="overlay-procesando" class="hidden fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/90 backdrop-blur-sm text-center px-8">
+            <div class="relative w-24 h-24 mb-8">
+                <div class="absolute inset-0 rounded-full border-4 border-indigo-500/20"></div>
+                <div class="absolute inset-0 rounded-full border-4 border-transparent border-t-indigo-400 animate-spin"></div>
+                <img src="./assets/logo.png" alt="" class="absolute inset-0 m-auto w-10 h-10 object-contain opacity-90">
+            </div>
+            <p class="text-indigo-100 font-semibold text-lg md:text-xl max-w-sm leading-relaxed">
+                Espere un momento, estamos preparando para usted la información más precisa
+            </p>
+            <div class="flex gap-1.5 mt-6">
+                <span class="w-2.5 h-2.5 rounded-full bg-indigo-400 animate-bounce" style="animation-delay:0ms"></span>
+                <span class="w-2.5 h-2.5 rounded-full bg-indigo-400 animate-bounce" style="animation-delay:150ms"></span>
+                <span class="w-2.5 h-2.5 rounded-full bg-indigo-400 animate-bounce" style="animation-delay:300ms"></span>
+            </div>
+        </div>
+
         <!--
             Orden de carga importante:
             1) data.js   -> define BASE_CONOCIMIENTO, AGENTES, VOZ_MASCULINA, VOZ_FEMENINA
