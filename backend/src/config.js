@@ -15,6 +15,13 @@ const config = {
 
     similarityThreshold: parseFloat(required('SIMILARITY_THRESHOLD', '0.86')),
 
+    // RAG real (nivel 3): cuantas aprobadas parecidas se le pasan como contexto al
+    // modelo cuando no hubo hit de cache, y que tan parecidas deben ser para contar
+    // (mas bajo que similarityThreshold a proposito: aqui no es "responder igual",
+    // es "esto puede servir de referencia").
+    ragTopN: parseInt(required('RAG_TOP_N', '3'), 10),
+    ragMinScore: parseFloat(required('RAG_MIN_SCORE', '0.55')),
+
     adminPassword: required('ADMIN_PASSWORD', 'admin'),
     sessionSecret: required('SESSION_SECRET', 'dev-secret-change-me'),
 

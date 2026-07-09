@@ -2,7 +2,7 @@ const express = require('express');
 const store = require('../store');
 const config = require('../config');
 const ollama = require('../ollama');
-const { normalizar, buscarMasParecido } = require('../similarity');
+const { normalizar, buscarMasParecido, buscarTopN } = require('../similarity');
 
 const router = express.Router();
 
@@ -32,15 +32,26 @@ router.post('/chat', async (req, res) => {
             });
         }
 
-        // Nivel 3: modelo local (Ollama qwen3:8b)
-        const respuestaModelo = await ollama.generarRespuesta(pregunta);
+        // Nivel 3: RAG real. Aunque ninguna aprobada cruzó el umbral de caché, buscamos
+        // las N más parecidas (con un piso mínimo para no meter ruido irrelevante) y se
+        // las damos al modelo como contexto, para que responda basado en tu información
+        // real en vez de solo lo que ya sabía de su entrenamiento.
+        const contextoRAG = buscarTopN(embeddingPregunta, aprobadas, config.ragTopN, config.ragMinScore)
+            .map(r => ({
+                pregunta: r.item.pregunta,
+                respuesta: r.item.respuesta,
+                score: Number(r.score.toFixed(4))
+            }));
+
+        const respuestaModelo = await ollama.generarRespuesta(pregunta, contextoRAG);
 
         const pendiente = store.addPendiente({
             pregunta,
             pregunta_normalizada: preguntaNormalizada,
             respuesta: respuestaModelo,
             embedding: embeddingPregunta,
-            agente
+            agente,
+            contexto_usado: contextoRAG
         });
 
         return res.json({
@@ -49,7 +60,8 @@ router.post('/chat', async (req, res) => {
             pendiente_revision: true,
             pendiente_id: pendiente.id,
             // la mejor coincidencia encontrada, por si el frontend quiere mostrar contexto/depurar
-            similitud_mas_cercana: coincidencia ? Number(coincidencia.score.toFixed(4)) : null
+            similitud_mas_cercana: coincidencia ? Number(coincidencia.score.toFixed(4)) : null,
+            contexto_usado: contextoRAG.length
         });
     } catch (err) {
         console.error('[chat] Error:', err.message);

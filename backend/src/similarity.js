@@ -20,22 +20,31 @@ function normalizar(texto) {
 }
 
 /**
+ * Devuelve los N items mas parecidos a un embedding dado, ordenados de mayor a menor
+ * similitud. A diferencia de buscarMasParecido, no se detiene en el mejor: sirve para
+ * armar contexto tipo RAG con varias referencias en vez de una sola.
+ * @param {number[]} embedding
+ * @param {object[]} items - cada uno con .embedding
+ * @param {number} n - cuantos resultados devolver como maximo
+ * @param {number} minScore - piso de similitud; resultados por debajo se descartan (ruido)
+ * @returns {{item: object, score: number}[]}
+ */
+function buscarTopN(embedding, items, n = 3, minScore = 0) {
+    return items
+        .filter(item => Array.isArray(item.embedding))
+        .map(item => ({ item, score: cosineSimilarity(embedding, item.embedding) }))
+        .filter(r => r.score >= minScore)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, n);
+}
+
+/**
  * Busca en una lista de items (que tienen .embedding) el más parecido a un embedding dado.
  * @returns {{item: object, score: number} | null}
  */
 function buscarMasParecido(embedding, items) {
-    let mejor = null;
-    let mejorScore = -1;
-    for (const item of items) {
-        if (!Array.isArray(item.embedding)) continue;
-        const score = cosineSimilarity(embedding, item.embedding);
-        if (score > mejorScore) {
-            mejorScore = score;
-            mejor = item;
-        }
-    }
-    if (!mejor) return null;
-    return { item: mejor, score: mejorScore };
+    const [mejor] = buscarTopN(embedding, items, 1, -1);
+    return mejor || null;
 }
 
-module.exports = { cosineSimilarity, normalizar, buscarMasParecido };
+module.exports = { cosineSimilarity, normalizar, buscarMasParecido, buscarTopN };

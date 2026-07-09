@@ -25,18 +25,45 @@ async function ollamaFetch(pathName, body) {
 }
 
 /**
+ * Construye el bloque de contexto RAG a partir de preguntas/respuestas ya aprobadas
+ * que resultaron parecidas a la pregunta actual (aunque no superen el umbral de caché).
+ * @param {{pregunta: string, respuesta: string, score: number}[]} contexto
+ * @returns {string}
+ */
+function formatearContextoRAG(contexto) {
+    return contexto
+        .map((c, i) => `[${i + 1}] (similitud ${c.score}) Pregunta previa: "${c.pregunta}"\nRespuesta aprobada: "${c.respuesta}"`)
+        .join('\n\n');
+}
+
+/**
  * Pide al modelo de chat local una respuesta a la pregunta del usuario.
  * @param {string} pregunta
+ * @param {{pregunta: string, respuesta: string, score: number}[]} contexto - referencias
+ *        de preguntas/respuestas ya aprobadas, mas parecidas a la pregunta actual (RAG).
+ *        Pasa un arreglo vacio si no hay ninguna referencia util.
  * @returns {Promise<string>}
  */
-async function generarRespuesta(pregunta) {
+async function generarRespuesta(pregunta, contexto = []) {
+    const messages = [{ role: 'system', content: SYSTEM_PROMPT }];
+
+    if (contexto.length > 0) {
+        messages.push({
+            role: 'system',
+            content: `A continuacion tienes preguntas y respuestas YA APROBADAS por un humano, `
+                + `las mas parecidas a la pregunta actual del usuario. Son tu fuente de verdad: `
+                + `basa tu respuesta en ellas cuando sean relevantes, en vez de usar solo lo que `
+                + `ya sabias de tu entrenamiento. Si ninguna aplica realmente a la pregunta, `
+                + `ignoralas y dilo honestamente en vez de inventar.\n\n${formatearContextoRAG(contexto)}`
+        });
+    }
+
+    messages.push({ role: 'user', content: pregunta });
+
     const data = await ollamaFetch('/api/chat', {
         model: config.chatModel,
         stream: false,
-        messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
-            { role: 'user', content: pregunta }
-        ]
+        messages
     });
     const contenido = data?.message?.content;
     if (!contenido) throw new Error('Ollama no devolvió contenido en la respuesta del chat.');
