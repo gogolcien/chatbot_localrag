@@ -162,7 +162,7 @@ function setAvatar(tipo) {
         txt.innerText = "TERMINADO";
     } else {
         img.src = AVATAR.neutral;
-        txt.innerText = "ESCRIBE TU RESPUESTA...";
+        txt.innerText = "ESCRIBE TU DUDA...";
     }
 }
 
@@ -170,7 +170,10 @@ function log(user, msg) {
     const box = document.getElementById('chat-box');
     const color = user === 'BOT' ? 'text-indigo-400' : 'text-green-400';
     const align = user === 'BOT' ? 'text-left' : 'text-right';
-    box.innerHTML += `<div class="${align}"><span class="${color} font-bold text-xs">${user}</span><br>${msg}</div>`;
+    const entrada = document.createElement('div');
+    entrada.className = align;
+    entrada.innerHTML = `<span class="${color} font-bold text-xs">${user}</span><br>${msg}`;
+    box.appendChild(entrada);
     box.scrollTop = box.scrollHeight;
 }
 
