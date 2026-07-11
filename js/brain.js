@@ -48,6 +48,30 @@ async function consultarBackend(txt) {
 
         const data = await res.json();
         ocultarOverlayProcesando();
+
+        // El backend detectó que un botón del menú se parece mucho a lo que preguntaste
+        // (más rápido y confiable que generar una respuesta nueva con IA).
+        if (data.fuente === 'sugerencia_menu' && data.sugerencia_menu) {
+            hablar(data.respuesta, () => {
+                mostrarBotones([
+                    {
+                        icono: '👉',
+                        label: `Ir a: ${data.sugerencia_menu.label}`,
+                        onClick: () => ejecutarOpcionMenuPorId(data.sugerencia_menu.id)
+                    },
+                    {
+                        icono: '✍️',
+                        label: 'No, mi pregunta es otra cosa',
+                        onClick: () => {
+                            estado = 'MENU';
+                            hablar('Ok, cuéntame con más detalle qué necesitas.', () => escuchar());
+                        }
+                    }
+                ]);
+            });
+            return;
+        }
+
         hablar(data.respuesta, () => volverAMenu());
 
         // Aviso discreto cuando la respuesta viene del modelo y está pendiente de revisión
@@ -67,16 +91,6 @@ async function consultarBackend(txt) {
 }
 
 // ================= CARGA DE DATOS (JSON) =================
-function buscarEnBaseConocimiento(texto) {
-    for (let item of BASE_CONOCIMIENTO) {
-        const encontrado = item.tags.some(tag => texto.includes(tag));
-        if (encontrado) {
-            return item;
-        }
-    }
-    return null;
-}
-
 window.onload = function () {
 
     fetch('https://nuevo.sistemaimacop.com.mx/API/ApiDestinos', {
@@ -163,6 +177,155 @@ function setAvatar(tipo) {
     } else {
         img.src = AVATAR.neutral;
         txt.innerText = "ESCRIBE TU DUDA...";
+    }
+}
+
+// ================= MENÚ POR BOTONES (2 niveles) =================
+
+/**
+ * Responde usando un item con forma {resp, url, info} — funciona igual para un match
+ * de BASE_CONOCIMIENTO por texto libre que para un click de botón en ITEMS_MENU.
+ * Es la única fuente de verdad para este tipo de respuesta fija + link.
+ */
+function responderItem(item) {
+    hablar(item.resp, () => volverAMenu());
+    if (item.url) {
+        mostrarBotonAbrir(item.info || "Haz clic para ver más detalles", item.url);
+    } else if (item.info) {
+        log('BOT', item.info);
+    }
+}
+
+/**
+ * Ejecuta la acción correspondiente a una opción del menú a partir de su id.
+ * Se usa cuando el backend sugiere que un botón del menú resuelve mejor la
+ * pregunta libre del usuario que una respuesta generada por IA (ver
+ * "sugerencia_menu" en consultarBackend). Cubre los 3 tipos de opción posibles:
+ * acción fija (ITEMS_MENU), FAQ (BASE_CONOCIMIENTO) y flujo de varios pasos
+ * (cotizar/pagos, definidos directo en MENU_PRINCIPAL).
+ */
+function ejecutarOpcionMenuPorId(id) {
+    if (ITEMS_MENU[id]) {
+        log('TU', `👉 ${ITEMS_MENU[id].label}`);
+        responderItem(ITEMS_MENU[id]);
+        return;
+    }
+
+    const faq = BASE_CONOCIMIENTO.find(item => item.id === id);
+    if (faq) {
+        log('TU', `👉 ${faq.label}`);
+        responderItem(faq);
+        return;
+    }
+
+    const catFlujo = MENU_PRINCIPAL.find(cat => cat.id === id && cat.tipo === 'flujo');
+    if (catFlujo) {
+        log('TU', `👉 ${catFlujo.label}`);
+        estado = catFlujo.flujo;
+        hablar(catFlujo.mensaje);
+        return;
+    }
+
+    console.warn('No se encontró la opción de menú con id:', id);
+    hablar('Se me perdió esa opción, mejor elige del menú abajo.', () => volverAMenu());
+}
+
+/** Devuelve las FAQ de BASE_CONOCIMIENTO que pertenecen a una categoría del menú. */
+function obtenerFAQPorCategoria(categoria) {
+    return BASE_CONOCIMIENTO.filter(item => item.categoria === categoria);
+}
+
+/**
+ * Pinta un grupo de botones dentro de una burbuja de chat (mismo estilo visual que
+ * mostrarBotonAbrir). Cada boton trae su propio onClick, así que sirve tanto para
+ * el menú principal como para cualquier submenú.
+ */
+function mostrarBotones(botones) {
+    const box = document.getElementById('chat-box');
+    const idUnico = 'menu-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+
+    let html = `<div class="text-left space-y-2 animate-fade-in" id="${idUnico}">
+        <span class="text-indigo-400 font-bold text-xs">BOT</span>
+        <div class="bg-slate-800 border border-indigo-500 rounded-xl p-2 space-y-1.5 max-w-xs">`;
+
+    botones.forEach((b, i) => {
+        html += `<button data-menu-idx="${i}" class="w-full text-left bg-slate-700 hover:bg-indigo-600 transition text-white text-sm px-3 py-2.5 rounded-lg flex items-center gap-2">
+            ${b.icono ? `<span>${b.icono}</span>` : ''}<span>${b.label}</span>
+        </button>`;
+    });
+
+    html += `</div></div>`;
+    box.innerHTML += html;
+    box.scrollTop = box.scrollHeight;
+
+    // Enlazamos los eventos aparte (no inline) para poder usar closures sin
+    // preocuparnos de escapar comillas/emojis dentro del HTML.
+    const contenedor = document.getElementById(idUnico);
+    botones.forEach((b, i) => {
+        const btnEl = contenedor.querySelector(`[data-menu-idx="${i}"]`);
+        if (!btnEl) return;
+        btnEl.addEventListener('click', () => {
+            // Evita doble click y deja constancia visual de cuál se eligió
+            contenedor.querySelectorAll('button').forEach(el => el.disabled = true);
+            contenedor.classList.add('opacity-50');
+            b.onClick();
+        });
+    });
+}
+
+/** Construye y muestra los botones del primer nivel (las 8 categorías). */
+function renderBotonesMenuPrincipal() {
+    const botones = MENU_PRINCIPAL.map(cat => ({
+        icono: cat.icono,
+        label: cat.label,
+        onClick: () => seleccionarCategoriaMenu(cat)
+    }));
+    mostrarBotones(botones);
+}
+
+/** Maneja el click de una categoría del primer nivel según su tipo. */
+function seleccionarCategoriaMenu(categoria) {
+    log('TU', `${categoria.icono} ${categoria.label}`);
+
+    if (categoria.tipo === 'flujo') {
+        estado = categoria.flujo;
+        hablar(categoria.mensaje);
+        return;
+    }
+
+    if (categoria.tipo === 'accion') {
+        responderItem(ITEMS_MENU[categoria.item]);
+        return;
+    }
+
+    if (categoria.tipo === 'submenu') {
+        let opciones = obtenerFAQPorCategoria(categoria.categoria);
+        let botones = opciones.map(item => ({
+            label: item.label,
+            onClick: () => responderItem(item)
+        }));
+
+        if (Array.isArray(categoria.extra)) {
+            const extras = categoria.extra
+                .map(key => ITEMS_MENU[key])
+                .filter(Boolean)
+                .map(item => ({ label: item.label, onClick: () => responderItem(item) }));
+            botones = extras.concat(botones);
+        }
+
+        if (categoria.libre) {
+            botones.push({
+                icono: '✍️',
+                label: 'Otra pregunta (escríbela abajo)',
+                onClick: () => {
+                    estado = 'MENU';
+                    hablar('Perfecto, escribe tu pregunta abajo y te ayudo con eso.', () => escuchar());
+                }
+            });
+        }
+
+        setTimeout(() => mostrarBotones(botones), 150);
+        return;
     }
 }
 
@@ -304,20 +467,13 @@ function iniciar() {
 
     setTimeout(() => {
         log('BOT',
-            "<b>Hola, Bienvenido, soy tu Asistente Virtual.</b>"+
-            "<br>🏨 Cotizar precio de Hoteles y Circuitos<br>" +
-            "💳 Subir Pagos<br>" +
-            "📄 Facturación<br>" +
-            "🎟️ Descargar Cupones y Publicidad<br>" +
-            "👤 Alta de Usuarios y White Label<br>" +
-            "🧑‍🏫 Capacitación<br>"+
-            "⤴️ Guía para asesorar a tus clientes<br>"+
-            "❓ Dudas generales<br>"+
-            "<b>¿En qué te puedo ayudar? Escribe lo que necesitas.</b>"
+            "<b>Hola, Bienvenido, soy tu Asistente Virtual.</b><br>" +
+            "Elige una opción para continuar, o si prefieres, escribe tu pregunta directamente abajo."
         );
 
+        setTimeout(() => renderBotonesMenuPrincipal(), 250);
         escuchar();
-           
+
     }, 100);
 }
 
@@ -325,105 +481,11 @@ function cerebro(txt)
 {
     if (estado === 'MENU')
     {
-        const respuestaFAQ = buscarEnBaseConocimiento(txt);
-
-        if (respuestaFAQ) {
-            hablar(respuestaFAQ.resp, () => volverAMenu());
-
-            if (respuestaFAQ.url) {
-                mostrarBotonAbrir(respuestaFAQ.info || "Haz clic para ver más detalles", respuestaFAQ.url);
-            } else if (respuestaFAQ.info) {
-                logDestinoVisual("Información Solicitada", "https://via.placeholder.com/300x100?text=Info+en+Pantalla");
-                log('BOT', respuestaFAQ.info);
-            }
-            return;
-        }
-
-        if (txt.includes('cotizar') || txt.includes('viaje')) {
-            estado = 'DESTINO';
-            hablar("Bien. ¿A qué destino viajan?");
-        }
-        else if (txt.includes('pago')) {
-            estado = 'PAGO';
-            hablar("Dime el GDL o localizador.");
-        }
-        // --- ALTA DE USUARIOS ---
-        else if (txt.includes('alta de usuario') || txt.includes('nuevo usuario') || txt.includes('registrar usuario')) {
-            estado = 'ALTA_USUARIO';
-
-            hablar(
-                "Para dar de alta usuarios, dirígete a Mundo Imacop, selecciona Mi Agente, y en el menú lateral izquierdo selecciona Tu Publicidad.",
-                () => { volverAMenu(); }
-            );
-
-            mostrarBotonAbrir(
-                "<b>Pasos para alta de Usuarios:</b><br>1. Ir a 'tu BackOffice : https://reservas.arenia.mx/backoffice'.<br>2. Menu lateral: Seleccionar 'Usuarios por Agencia'.<br>3. Menú superior: 'presionar el boton con simbolo de + <br> Llenar formulario: con los datos del nuevo Usuario'.",
-                "https://agentes.imacop.com.mx/backoffice"
-            );
-        }
-        // ---------------------------------------------
-        else if (txt.includes('publicidad')) {
-            estado = 'PUBLICIDAD';
-
-            hablar(
-                "Excelente decisión. Ya tengo listo el acceso a nuestra sección de publicidad, Aquí encontrarás un banco de promociones actualizadas que puedes descargar, personalizar con el logotipo de tu agencia y compartir libremente con tus clientes.",
-                () => {
-                    volverAMenu();
-                }
-            );
-
-            mostrarBotonAbrir(
-                "Aquí encontrarás un banco de promociones actualizadas que puedes descargar, personalizar con el logotipo de tu agencia y compartir libremente con tus clientes.",
-                "https://agentes.imacop.com.mx/backoffice/imacop/publicidad"
-            );
-        }
-        else if (txt.includes('guía')) {
-            estado = 'GUÍA';
-
-            hablar(
-                "Excelente elección. Te dejo el acceso a nuestra guía interactiva de hoteles, Consulta destinos, hoteles, habitaciones e instalaciones para asesorar mejor a tus clientes.",
-                () => {
-                    volverAMenu();
-                }
-            );
-
-            mostrarBotonAbrir(
-                "Consulta destinos, hoteles, habitaciones e instalaciones para asesorar mejor a tus clientes.",
-                "https://guiainteractivadehoteles.com"
-            );
-        }
-        else if (txt.includes('factura')) {
-            estado = 'FACTURA';
-
-            hablar(
-                "Perfecto. Aquí tienes el acceso a nuestro portal de facturación electrónica,Recuerda que solo se puede facturar el mes en curso. Te recomendamos hacerlo a tiempo.",
-                () => {
-                    volverAMenu();
-                }
-            );
-
-            mostrarBotonAbrir(
-                "Recuerda que solo se puede facturar el mes en curso. Te recomendamos hacerlo a tiempo.",
-                "https://facturacion.imacoponline.com/index.php"
-            );
-        }
-        else if (txt.includes('capacitación') || txt.includes('capacitar') ) {
-            estado = 'CAPACITACION';
-            hablar(
-                "Entendido, excelente elección. Te redirigiré a nuestro portal de capacitación, donde podrás mantenerte actualizado y fortalecer tus conocimientos como agente de viajes.",
-                () => {
-                    volverAMenu();
-                }
-            );
-
-            mostrarBotonAbrir(
-                "Entendido, excelente elección. Te redirigiré a nuestro portal de capacitación, donde podrás mantenerte actualizado y fortalecer tus conocimientos como agente de viajes.",
-                "https://agentes.imacop.com.mx/backoffice/imacop/capacitaciones"
-            );
-        }
-        else {
-            consultarBackend(txt);
-        }
+        // Ya no se compara contra tags ni palabras clave: las 25 opciones de FAQ/trámites
+        // se navegan por botones (ver MENU_PRINCIPAL / seleccionarCategoriaMenu en data.js
+        // y arriba en este archivo). Cualquier texto libre que llegue aquí es una pregunta
+        // que no cubre ningún botón, así que va directo al backend (cache semántico + IA).
+        consultarBackend(txt);
         return;
     }
 
@@ -660,18 +722,9 @@ function mostrarBotonAbrir(texto, url) {
 function volverAMenu(delay = 800) {
     setTimeout(() => {
         estado = 'MENU';
-        hablar(
-             "<b>¿Puedo ayudarte en algo más?</b>"+
-            "<br>Cuento con los siguientes servicios:<br>" +
-            "🏨 Cotizar precio de Hoteles y Circuitos<br>" +
-            "💳 Subir Pagos<br>" +
-            "📄 Facturación<br>" +
-            "🎟️ Descargar Cupones y Publicidad<br>" +
-            "👤 Alta de Usuarios y White Label<br>" +
-            "🧑‍🏫 Capacitación<br>"+
-            "⤴️ Guía para asesorar a tus clientes<br>"+
-            "❓ Dudas generales",
-            () => escuchar()
-        );
+        hablar("<b>¿Puedo ayudarte en algo más?</b>", () => {
+            setTimeout(() => renderBotonesMenuPrincipal(), 150);
+            escuchar();
+        });
     }, delay);
 }

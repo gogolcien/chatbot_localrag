@@ -37,14 +37,29 @@ function formatearContextoRAG(contexto) {
 }
 
 /**
+ * Formatea opciones del menú de la app que se parecen (aunque no lo suficiente
+ * para redirigir directo) a la pregunta del usuario, para que el modelo pueda
+ * sugerirlas dentro de su respuesta si de verdad aplican.
+ * @param {{ruta: string, score: number}[]} opciones
+ * @returns {string}
+ */
+function formatearOpcionesMenu(opciones) {
+    return opciones
+        .map(o => `- "${o.ruta}" (similitud ${o.score})`)
+        .join('\n');
+}
+
+/**
  * Pide al modelo de chat local una respuesta a la pregunta del usuario.
  * @param {string} pregunta
  * @param {{pregunta: string, respuesta: string, score: number}[]} contexto - referencias
  *        de preguntas/respuestas ya aprobadas, mas parecidas a la pregunta actual (RAG).
  *        Pasa un arreglo vacio si no hay ninguna referencia util.
+ * @param {{ruta: string, score: number}[]} opcionesMenu - opciones del menú de la app que
+ *        se parecen a la pregunta pero no lo suficiente como para redirigir directo.
  * @returns {Promise<string>}
  */
-async function generarRespuesta(pregunta, contexto = []) {
+async function generarRespuesta(pregunta, contexto = [], opcionesMenu = []) {
     const messages = [{ role: 'system', content: SYSTEM_PROMPT }];
 
     if (contexto.length > 0) {
@@ -55,6 +70,19 @@ async function generarRespuesta(pregunta, contexto = []) {
                 + `basa tu respuesta en ellas cuando sean relevantes, en vez de usar solo lo que `
                 + `ya sabias de tu entrenamiento. Si ninguna aplica realmente a la pregunta, `
                 + `ignoralas y dilo honestamente en vez de inventar.\n\n${formatearContextoRAG(contexto)}`
+        });
+    }
+
+    if (opcionesMenu.length > 0) {
+        messages.push({
+            role: 'system',
+            content: `La app donde estás integrado tiene botones de menú con respuesta instantánea `
+                + `sobre estos temas, que podrían aplicar a la pregunta del usuario. Cada una ya trae `
+                + `entre comillas la RUTA EXACTA de navegación (número y nombre de cada nivel del menú):\n\n${formatearOpcionesMenu(opcionesMenu)}\n\n`
+                + `Si alguna realmente aplica, termina tu respuesta con una línea breve, usando la ruta `
+                + `TAL CUAL viene arriba (no la cambies ni la traduzcas), con este formato exacto: `
+                + `También puedes usar el botón "<ruta exacta>" del menú para esto. `
+                + `Si ninguna aplica de verdad, no menciones nada de esto.`
         });
     }
 
