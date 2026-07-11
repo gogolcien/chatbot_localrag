@@ -162,7 +162,7 @@ function validarDestino(textoUsuario) {
 function setAvatar(tipo) {
     const img = document.getElementById('avatar-img');
     const txt = document.getElementById('estado-texto');
-    img.className = "w-48 h-48 object-contain  border-4 border-indigo-500 bg-white shadow-xl transition-all duration-200";
+    img.className = "w-24 h-24 object-contain border-4 border-indigo-500 bg-white shadow-xl transition-all duration-200";
 
     if (tipo === 'hablar') {
         img.src = AVATAR.hablar;
@@ -236,17 +236,19 @@ function obtenerFAQPorCategoria(categoria) {
 }
 
 /**
- * Pinta un grupo de botones dentro de una burbuja de chat (mismo estilo visual que
- * mostrarBotonAbrir). Cada boton trae su propio onClick, así que sirve tanto para
- * el menú principal como para cualquier submenú.
+ * Pinta un grupo de botones en el panel lateral exclusivo para el menú de opciones
+ * (#menu-panel-content), separado de la consola de interacción (#chat-box). Cada
+ * boton trae su propio onClick, así que sirve tanto para el menú principal como
+ * para cualquier submenú. Cada llamada reemplaza el contenido anterior del panel,
+ * ya que el panel siempre debe reflejar únicamente las opciones vigentes.
  */
 function mostrarBotones(botones) {
-    const box = document.getElementById('chat-box');
+    const panel = document.getElementById('menu-panel-content');
+    if (!panel) return;
+
     const idUnico = 'menu-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
 
-    let html = `<div class="text-left space-y-2 animate-fade-in" id="${idUnico}">
-        <span class="text-indigo-400 font-bold text-xs">BOT</span>
-        <div class="bg-slate-800 border border-indigo-500 rounded-xl p-2 space-y-1.5 max-w-xs">`;
+    let html = `<div class="space-y-1.5 animate-fade-in" id="${idUnico}">`;
 
     botones.forEach((b, i) => {
         html += `<button data-menu-idx="${i}" class="w-full text-left bg-slate-700 hover:bg-indigo-600 transition text-white text-sm px-3 py-2.5 rounded-lg flex items-center gap-2">
@@ -254,9 +256,8 @@ function mostrarBotones(botones) {
         </button>`;
     });
 
-    html += `</div></div>`;
-    box.innerHTML += html;
-    box.scrollTop = box.scrollHeight;
+    html += `</div>`;
+    panel.innerHTML = html;
 
     // Enlazamos los eventos aparte (no inline) para poder usar closures sin
     // preocuparnos de escapar comillas/emojis dentro del HTML.
@@ -271,6 +272,13 @@ function mostrarBotones(botones) {
             b.onClick();
         });
     });
+}
+
+/** Limpia el panel de menú y vuelve a mostrar el mensaje de "sin opciones". */
+function limpiarPanelMenu() {
+    const panel = document.getElementById('menu-panel-content');
+    if (!panel) return;
+    panel.innerHTML = `<p id="menu-panel-vacio" class="text-gray-500 text-center italic text-xs mt-4">Aún no hay opciones disponibles.</p>`;
 }
 
 /** Construye y muestra los botones del primer nivel (las 8 categorías). */
@@ -464,6 +472,10 @@ function iniciar() {
     // 2. Mostramos el área de input de texto
     const inputArea = document.getElementById('input-area');
     inputArea.classList.remove('hidden');
+
+    // 3. Mostramos el panel del menú de opciones (oculto hasta este momento)
+    const menuPanel = document.getElementById('menu-panel');
+    if (menuPanel) menuPanel.classList.remove('hidden');
 
     setTimeout(() => {
         log('BOT',

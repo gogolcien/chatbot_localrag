@@ -7,14 +7,29 @@
         <script src="https://cdn.tailwindcss.com"></script>
         <link rel="stylesheet" href="./css/styles.css">
     </head>
-    <body class="bg-slate-950 h-screen flex items-center justify-center text-white font-sans">
+    <body class="bg-slate-950 min-h-screen flex items-center justify-center text-white font-sans py-6">
         <div id="particles-js" class="fixed inset-0 w-full h-full z-0"></div>
-        <div class="relative z-10 w-full max-w-lg bg-slate-900 rounded-2xl shadow-2xl border border-slate-700 overflow-hidden">
+        <div class="relative z-10 w-full max-w-4xl flex flex-col md:flex-row gap-4 items-stretch justify-center px-4">
 
-            <div class="bg-gradient-to-b from-indigo-700 to-indigo-900 py-6 relative text-center">
+            <!-- Panel vertical exclusivo para el menú de opciones (separado de la consola de interacción).
+                 Oculto hasta presionar "EMPEZAR" (ver iniciar() en brain.js). Ancho ajustado al
+                 contenido (md:w-fit) con un tope máximo (md:max-w-xs) para que no quede más ancho
+                 de lo que requiere la opción más larga. -->
+            <aside id="menu-panel" class="hidden order-1 w-full md:w-fit md:max-w-xs md:flex-shrink-0 bg-slate-900 rounded-2xl shadow-2xl border border-slate-700 overflow-hidden flex flex-col">
+                <div class="bg-gradient-to-b from-indigo-700 to-indigo-900 py-4 px-4 text-center flex-shrink-0">
+                    <p class="text-xs tracking-[0.2em] text-indigo-200 uppercase font-bold">Menú de Opciones</p>
+                </div>
+                <div id="menu-panel-content" class="flex-1 overflow-y-auto p-3 space-y-1.5 min-h-[120px] max-h-[300px] md:max-h-none">
+                    <p id="menu-panel-vacio" class="text-gray-500 text-center italic text-xs mt-4">Aún no hay opciones disponibles.</p>
+                </div>
+            </aside>
+
+            <div class="order-2 w-full max-w-lg bg-slate-900 rounded-2xl shadow-2xl border border-slate-700 overflow-hidden">
+
+            <div class="bg-gradient-to-b from-indigo-700 to-indigo-900 py-4 relative text-center">
 
                 <img src="./assets/logo.png"
-                    class="mx-auto w-32 md:w-40 drop-shadow-xl mb-3"
+                    class="mx-auto w-24 md:w-28 drop-shadow-xl mb-2"
                     alt="Logo">
 
                 <p class="text-xs tracking-[0.3em] text-indigo-200 uppercase">
@@ -23,7 +38,7 @@
             </div>
 
 
-            <div id="selector-agente" class="flex gap-6 justify-center p-4">
+            <div id="selector-agente" class="flex gap-6 justify-center p-3">
                 <button onclick="seleccionarAgente('ian')" class="bg-slate-800 hover:bg-indigo-600 p-4 rounded-xl">
                     <img src="./assets/IAN.gif" alt=""><br>
                     Ian<br><span class="text-xs text-gray-400">Chat de texto</span>
@@ -35,17 +50,17 @@
                 </button>
             </div>
 
-            <div id="bloque-avatar"   class="p-6 flex flex-col items-center relative min-h-[150px] hidden">
+            <div id="bloque-avatar"   class="p-3 flex flex-col items-center relative min-h-[90px] hidden">
                 <img id="avatar-img"
                     src="./assets/saludo.gif"
                     onerror="this.src='https://via.placeholder.com/150?text=Bot'"
-                    class="bg-white w-40 h-24 object-contain">
+                    class="bg-white w-28 h-16 object-contain">
 
-                <p id="estado-texto" class="text-indigo-300 font-mono text-sm uppercase tracking-widest mt-4">Cargando destinos...</p>
+                <p id="estado-texto" class="text-indigo-300 font-mono text-sm uppercase tracking-widest mt-2">Cargando destinos...</p>
             </div>
 
             <div class="relative">
-                <div class="bg-slate-950/50 h-[450px] overflow-y-auto p-4 space-y-3 border-t border-slate-800" id="chat-box">
+                <div class="bg-slate-950/50 h-[300px] overflow-y-auto p-4 space-y-3 border-t border-slate-800" id="chat-box">
                     <p class="text-gray-500 text-center italic text-xs">-- Consola de Interacción --</p>
                 </div>
 
@@ -70,7 +85,7 @@
                 </div>
             </div>
 
-            <div id="input-area" class="px-4 py-3 bg-slate-900 border-t border-slate-800 hidden">
+            <div id="input-area" class="px-4 py-2 bg-slate-900 border-t border-slate-800 hidden">
                 <div class="flex gap-2">
                     <input
                         id="text-input"
@@ -91,6 +106,7 @@
             <button id="btn-start" onclick="iniciar()" disabled class="w-full bg-gray-600 cursor-not-allowed py-4 font-bold text-lg transition opacity-50 hidden rounded-b-xl">
                 CARGANDO BASE DE DATOS...
             </button>
+            </div>
         </div>
 
         <!--
