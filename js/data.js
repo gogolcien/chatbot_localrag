@@ -203,7 +203,7 @@ const MENU_PRINCIPAL = [
     { id: 'alta_usuarios', icono: '👤', label: 'Alta de Usuarios y White Label', tipo: 'submenu', categoria: 'alta_usuarios', extra: ['alta_usuarios'] },
     { id: 'capacitacion', icono: '🧑\u200d🏫', label: 'Capacitación', tipo: 'accion', item: 'capacitacion' },
     { id: 'guia', icono: '⤴️', label: 'Guía para asesorar a tus clientes', tipo: 'accion', item: 'guia' },
-    { id: 'dudas', icono: '❓', label: 'Dudas generales', tipo: 'submenu', categoria: 'dudas', libre: true }
+    { id: 'dudas', icono: '❓', label: 'Dudas generales', tipo: 'submenu', categoria: 'dudas', libre: false }
 ];
 
 // ================= AGENTES =================

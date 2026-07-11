@@ -72,7 +72,25 @@ async function consultarBackend(txt) {
             return;
         }
 
-        hablar(data.respuesta, () => volverAMenu());
+        hablar(data.respuesta, () => {
+            // La pregunta no fue lo bastante parecida a un botón como para redirigir directo
+            // (eso ya se resolvió arriba), pero si el backend detectó una opción de submenú
+            // razonablemente acorde, se muestra como botón exacto en el panel — así el usuario
+            // siempre ve la opción correcta, sin depender de que el modelo la haya mencionado
+            // bien (o del todo) dentro de su respuesta en texto libre.
+            if (data.sugerencia_menu) {
+                mostrarBotones([
+                    {
+                        icono: '👉',
+                        label: `Ir a: ${data.sugerencia_menu.label}`,
+                        onClick: () => ejecutarOpcionMenuPorId(data.sugerencia_menu.id)
+                    }
+                ]);
+                escuchar();
+            } else {
+                volverAMenu();
+            }
+        });
 
         // Aviso discreto cuando la respuesta viene del modelo y está pendiente de revisión
         if (data.pendiente_revision) {
@@ -426,7 +444,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (input) {
         input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
+            if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 enviarTexto();
             }
