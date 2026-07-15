@@ -21,9 +21,9 @@ router.post('/chat', async (req, res) => {
         const embeddingPregunta = await ollama.generarEmbedding(pregunta);
 
         // Se calcula una sola vez la opción de menú más parecida a la pregunta (si Ollama ya
-        // cargó las embeddings). Se reutiliza tanto para el redirect directo de Nivel 1.5 como
-        // para la sugerencia "secundaria" de Nivel 3 más abajo, así siempre es la MISMA opción
-        // (la más acorde), sin volver a calcularla ni depender de que el modelo la copie bien.
+        // cargó las embeddings). Se reutiliza más abajo, en el Nivel 3, para la mención de
+        // texto en la consola de interacción, así siempre es la MISMA opción (la más acorde),
+        // sin volver a calcularla ni depender de que el modelo la copie bien.
         let mejorOpcionMenu = null;
         try {
             const opcionesMenu = await obtenerOpcionesMenuConEmbedding();
@@ -32,24 +32,6 @@ router.post('/chat', async (req, res) => {
             // Si falla el cálculo de embeddings de las opciones de menú (p.ej. Ollama
             // aún no cargaba), no tumbamos el chat: seguimos con cache/RAG normal.
             console.warn('[chat] No se pudieron comparar las opciones de menú:', errMenu.message);
-        }
-
-        // Nivel 1.5: ¿la pregunta se parece MUCHO a una opción del menú que ya tiene
-        // respuesta instantánea (incluye las FAQs de cada submenú, no solo la categoría)?
-        // Si es así, mejor redirigir ahí que gastar una llamada al modelo (más rápido, y
-        // con contenido curado en vez de generado por IA).
-        if (mejorOpcionMenu && mejorOpcionMenu.score >= config.menuRedirectThreshold) {
-            return res.json({
-                respuesta: `Lo que escribiste sugiere que este botón del menú "${mejorOpcionMenu.item.ruta}" podría ayudarte.`,
-                fuente: 'sugerencia_menu',
-                similitud: Number(mejorOpcionMenu.score.toFixed(4)),
-                sugerencia_menu: {
-                    id: mejorOpcionMenu.item.id,
-                    label: mejorOpcionMenu.item.label,
-                    ruta: mejorOpcionMenu.item.ruta
-                },
-                pendiente_revision: false
-            });
         }
 
         // Nivel 2: caché semántico (tabla "aprobadas")
@@ -62,7 +44,10 @@ router.post('/chat', async (req, res) => {
                 respuesta: coincidencia.item.respuesta,
                 fuente: 'cache_semantico',
                 similitud: Number(coincidencia.score.toFixed(4)),
-                pendiente_revision: false
+                pendiente_revision: false,
+                // categoría(s) que el administrador le puso a esta respuesta aprobada, solo
+                // como dato informativo de texto para la consola de interacción
+                tags: coincidencia.item.tags || []
             });
         }
 
@@ -77,14 +62,12 @@ router.post('/chat', async (req, res) => {
                 score: Number(r.score.toFixed(4))
             }));
 
-        // La opción de menú más parecida (mejorOpcionMenu) no llegó al umbral de redirect
-        // directo, pero si aun así se parece lo suficiente, se manda como sugerencia
-        // ESTRUCTURADA (botón real en el panel de menú, vía "sugerencia_menu") en vez de
-        // pedirle al modelo que la mencione como texto: así siempre es exacta y siempre
-        // apunta al submenú/FAQ correcto, sin depender de que la IA copie bien la ruta.
-        const sugerenciaSecundaria = (mejorOpcionMenu && mejorOpcionMenu.score >= config.menuMentionThreshold)
+        // La opción de menú más parecida (mejorOpcionMenu), si se parece lo suficiente,
+        // ya NO se ofrece como botón real del panel de menú: solo se informa como texto
+        // en la consola de interacción y queda registrada junto con el pendiente para que
+        // el administrador la vea en el panel de revisión (id="menu-mention").
+        const menuMention = (mejorOpcionMenu && mejorOpcionMenu.score >= config.menuMentionThreshold)
             ? {
-                id: mejorOpcionMenu.item.id,
                 label: mejorOpcionMenu.item.label,
                 ruta: mejorOpcionMenu.item.ruta,
                 similitud: Number(mejorOpcionMenu.score.toFixed(4))
@@ -99,7 +82,8 @@ router.post('/chat', async (req, res) => {
             respuesta: respuestaModelo,
             embedding: embeddingPregunta,
             agente,
-            contexto_usado: contextoRAG
+            contexto_usado: contextoRAG,
+            menu_mention: menuMention
         });
 
         return res.json({
@@ -110,9 +94,10 @@ router.post('/chat', async (req, res) => {
             // la mejor coincidencia encontrada, por si el frontend quiere mostrar contexto/depurar
             similitud_mas_cercana: coincidencia ? Number(coincidencia.score.toFixed(4)) : null,
             contexto_usado: contextoRAG.length,
-            // opción del submenú más acorde (si hubo alguna razonablemente parecida), para
-            // que el frontend siempre la muestre como botón en el panel de menú
-            sugerencia_menu: sugerenciaSecundaria
+            // opción del submenú más acorde (si hubo alguna razonablemente parecida), solo
+            // como dato informativo de texto para la consola de interacción (ya no es un
+            // botón del panel de menú)
+            menu_mention: menuMention
         });
     } catch (err) {
         console.error('[chat] Error:', err.message);

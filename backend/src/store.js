@@ -44,7 +44,7 @@ const store = {
     listPendientes() {
         return readAll('pendientes').sort((a, b) => new Date(b.fecha_creacion) - new Date(a.fecha_creacion));
     },
-    addPendiente({ pregunta, pregunta_normalizada, respuesta, embedding, agente, contexto_usado }) {
+    addPendiente({ pregunta, pregunta_normalizada, respuesta, embedding, agente, contexto_usado, menu_mention }) {
         const items = readAll('pendientes');
         const item = {
             id: newId(),
@@ -57,6 +57,9 @@ const store = {
             // RAG para generar esta respuesta. Util para revisar en el panel de admin
             // en que se baso el modelo, aunque no haya sido un hit exacto de cache.
             contexto_usado: Array.isArray(contexto_usado) ? contexto_usado : [],
+            // Opción del menú más parecida a la pregunta (si cruzó MENU_MENTION_THRESHOLD),
+            // para que el administrador la vea en el panel de revisión.
+            menu_mention: menu_mention || null,
             estado: 'pendiente',
             fecha_creacion: new Date().toISOString()
         };

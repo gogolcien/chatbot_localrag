@@ -92,7 +92,12 @@ async function cargarPendientes() {
             <input type="text" class="edit-pregunta" value="${escapeHtml(item.pregunta)}">
             <div class="pregunta" style="margin-top:8px">Respuesta del modelo:</div>
             <textarea class="edit-respuesta">${escapeHtml(item.respuesta)}</textarea>
-            <input type="text" class="edit-tags" placeholder="Tags separados por coma (opcional)">
+            ${item.menu_mention ? `
+            <div id="menu-mention-${item.id}" class="menu-mention">
+                ℹ️ También se parece a la opción de menú "${escapeHtml(item.menu_mention.label)}"
+                (${escapeHtml(item.menu_mention.ruta)}) — similitud ${item.menu_mention.similitud}
+            </div>` : ''}
+            <input type="text" class="edit-tags" value="${item.menu_mention ? escapeHtml(`${item.menu_mention.label} (${item.menu_mention.ruta})`) : ''}" placeholder="Posible categoría del menú (opcional)">
             <div class="actions">
                 <button class="btn-success btn-aprobar">Aprobar y guardar en caché</button>
                 <button class="btn-danger btn-rechazar">Rechazar / eliminar</button>
@@ -158,7 +163,7 @@ async function cargarAprobadas() {
             <input type="text" class="edit-pregunta" value="${escapeHtml(item.pregunta)}">
             <div class="pregunta" style="margin-top:8px">Respuesta:</div>
             <textarea class="edit-respuesta">${escapeHtml(item.respuesta)}</textarea>
-            <input type="text" class="edit-tags" value="${escapeHtml((item.tags || []).join(', '))}" placeholder="Tags separados por coma">
+            <input type="text" class="edit-tags" value="${escapeHtml((item.tags || []).join(', '))}" placeholder="Posible categoría del menú (opcional)">
             <div class="actions">
                 <button class="btn-primary btn-guardar">Guardar cambios</button>
                 <button class="btn-danger btn-eliminar">Eliminar</button>

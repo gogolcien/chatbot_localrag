@@ -120,6 +120,15 @@ header.topbar h1 span { color: var(--muted); font-weight: 400; }
 }
 
 .item-card .pregunta { font-weight: 600; margin-bottom: 6px; }
+.item-card .menu-mention {
+    margin-top: 8px;
+    padding: 8px 10px;
+    font-size: 13px;
+    border-radius: 6px;
+    background: rgba(165, 180, 252, 0.12);
+    border: 1px solid rgba(165, 180, 252, 0.35);
+    color: #a5b4fc;
+}
 .item-card .respuesta { color: var(--text); font-size: 14px; white-space: pre-wrap; margin-bottom: 10px; }
 .item-card .meta { color: var(--muted); font-size: 12px; margin-bottom: 10px; }
 .item-card .meta .badge {

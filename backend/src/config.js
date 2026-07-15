@@ -22,12 +22,11 @@ const config = {
     ragTopN: parseInt(required('RAG_TOP_N', '3'), 10),
     ragMinScore: parseFloat(required('RAG_MIN_SCORE', '0.55')),
 
-    // Sugerencia de opciones de menú (nivel intermedio, antes de gastar una llamada al modelo):
-    // - menuRedirectThreshold: si la pregunta se parece MUCHO a un botón del menú, se redirige
-    //   directo a esa opción (respuesta instantánea, sin usar el modelo de IA).
-    // - menuMentionThreshold: si se parece pero no lo suficiente para redirigir, se le pasa
-    //   igual al modelo como contexto extra, por si quiere sugerirla dentro de su respuesta.
-    menuRedirectThreshold: parseFloat(required('MENU_REDIRECT_THRESHOLD', '0.82')),
+    // Mención de opciones de menú (nivel intermedio, antes de gastar una llamada al modelo):
+    // - menuMentionThreshold: si la pregunta se parece razonablemente a un botón del menú,
+    //   esa coincidencia se muestra como texto informativo en la consola de interacción y
+    //   queda registrada en el pendiente para revisión del administrador (no se ofrece como
+    //   botón del menú de opciones).
     menuMentionThreshold: parseFloat(required('MENU_MENTION_THRESHOLD', '0.55')),
 
     adminPassword: required('ADMIN_PASSWORD', 'admin'),

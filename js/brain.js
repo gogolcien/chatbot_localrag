@@ -49,48 +49,27 @@ async function consultarBackend(txt) {
         const data = await res.json();
         ocultarOverlayProcesando();
 
-        // El backend detectó que un botón del menú se parece mucho a lo que preguntaste
-        // (más rápido y confiable que generar una respuesta nueva con IA).
-        if (data.fuente === 'sugerencia_menu' && data.sugerencia_menu) {
-            hablar(data.respuesta, () => {
-                mostrarBotones([
-                    {
-                        icono: '👉',
-                        label: `Ir a: ${data.sugerencia_menu.label}`,
-                        onClick: () => ejecutarOpcionMenuPorId(data.sugerencia_menu.id)
-                    },
-                    {
-                        icono: '✍️',
-                        label: 'No, mi pregunta es otra cosa',
-                        onClick: () => {
-                            estado = 'MENU';
-                            hablar('Ok, cuéntame con más detalle qué necesitas.', () => escuchar());
-                        }
-                    }
-                ]);
-            });
-            return;
+        hablar(data.respuesta, () => {
+            volverAMenu();
+        });
+
+        // Si el backend detectó una opción de menú razonablemente parecida a la pregunta
+        // (MENU_MENTION_THRESHOLD), ya no se ofrece como botón del panel de menú: solo se
+        // informa como texto en la consola de interacción (#chat-box), a modo de dato.
+        if (data.menu_mention) {
+            setTimeout(() => {
+                log('SISTEMA', `ℹ️ Te recomiendo consultar dentro del menú de opciones "${data.menu_mention.label}" (${data.menu_mention.ruta}).`);
+            }, 350);
         }
 
-        hablar(data.respuesta, () => {
-            // La pregunta no fue lo bastante parecida a un botón como para redirigir directo
-            // (eso ya se resolvió arriba), pero si el backend detectó una opción de submenú
-            // razonablemente acorde, se muestra como botón exacto en el panel — así el usuario
-            // siempre ve la opción correcta, sin depender de que el modelo la haya mencionado
-            // bien (o del todo) dentro de su respuesta en texto libre.
-            if (data.sugerencia_menu) {
-                mostrarBotones([
-                    {
-                        icono: '👉',
-                        label: `Ir a: ${data.sugerencia_menu.label}`,
-                        onClick: () => ejecutarOpcionMenuPorId(data.sugerencia_menu.id)
-                    }
-                ]);
-                escuchar();
-            } else {
-                volverAMenu();
-            }
-        });
+        // Cuando la respuesta viene del caché semántico (ya fue aprobada por un admin),
+        // si tiene categoría(s) asignada(s), se muestran como texto en la consola de
+        // interacción, a modo de dato (no como botón del menú).
+        if (data.fuente === 'cache_semantico' && Array.isArray(data.tags) && data.tags.length > 0) {
+            setTimeout(() => {
+                log('SISTEMA', `🏷️ Categoría: ${data.tags.join(', ')}`);
+            }, 350);
+        }
 
         // Aviso discreto cuando la respuesta viene del modelo y está pendiente de revisión
         if (data.pendiente_revision) {
@@ -212,40 +191,6 @@ function responderItem(item) {
     } else if (item.info) {
         log('BOT', item.info);
     }
-}
-
-/**
- * Ejecuta la acción correspondiente a una opción del menú a partir de su id.
- * Se usa cuando el backend sugiere que un botón del menú resuelve mejor la
- * pregunta libre del usuario que una respuesta generada por IA (ver
- * "sugerencia_menu" en consultarBackend). Cubre los 3 tipos de opción posibles:
- * acción fija (ITEMS_MENU), FAQ (BASE_CONOCIMIENTO) y flujo de varios pasos
- * (cotizar/pagos, definidos directo en MENU_PRINCIPAL).
- */
-function ejecutarOpcionMenuPorId(id) {
-    if (ITEMS_MENU[id]) {
-        log('TU', `👉 ${ITEMS_MENU[id].label}`);
-        responderItem(ITEMS_MENU[id]);
-        return;
-    }
-
-    const faq = BASE_CONOCIMIENTO.find(item => item.id === id);
-    if (faq) {
-        log('TU', `👉 ${faq.label}`);
-        responderItem(faq);
-        return;
-    }
-
-    const catFlujo = MENU_PRINCIPAL.find(cat => cat.id === id && cat.tipo === 'flujo');
-    if (catFlujo) {
-        log('TU', `👉 ${catFlujo.label}`);
-        estado = catFlujo.flujo;
-        hablar(catFlujo.mensaje);
-        return;
-    }
-
-    console.warn('No se encontró la opción de menú con id:', id);
-    hablar('Se me perdió esa opción, mejor elige del menú abajo.', () => volverAMenu());
 }
 
 /** Devuelve las FAQ de BASE_CONOCIMIENTO que pertenecen a una categoría del menú. */
