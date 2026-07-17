@@ -269,7 +269,7 @@ function seleccionarCategoriaMenu(categoria) {
         return;
     }
 
-    if (categoria.tipo === 'submenu') {
+    if (categoria.tipo === 'submenu' || categoria.tipo === 'submenu_flujo') {
         let opciones = obtenerFAQPorCategoria(categoria.categoria);
         let botones = opciones.map(item => ({
             label: item.label,
@@ -282,6 +282,19 @@ function seleccionarCategoriaMenu(categoria) {
                 .filter(Boolean)
                 .map(item => ({ label: item.label, onClick: () => responderItem(item) }));
             botones = extras.concat(botones);
+        }
+
+        // 'submenu_flujo': el primer botón no responde una FAQ, inicia el mismo
+        // flujo de varios pasos que antes disparaba directo la categoría (p.ej. cotizar).
+        if (categoria.tipo === 'submenu_flujo') {
+            botones = [{
+                icono: '▶️',
+                label: categoria.flujoLabel || 'Iniciar',
+                onClick: () => {
+                    estado = categoria.flujo;
+                    hablar(categoria.mensaje);
+                }
+            }].concat(botones);
         }
 
         if (categoria.libre) {

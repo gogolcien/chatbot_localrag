@@ -3,18 +3,19 @@ const { BASE_CONOCIMIENTO, ITEMS_MENU, MENU_PRINCIPAL } = require(path.join(__di
 const ollama = require('./ollama');
 
 /**
- * Construye la lista plana de las 24 opciones "hoja" del menú (las que ya
- * tienen una respuesta instantánea y curada, sin pasar por el modelo de IA).
- * Se omite a propósito el botón catch-all "Otra pregunta (escríbela abajo)"
- * de la categoría "dudas" (no es una opción con respuesta propia), pero SÍ
- * se incluyen las 15 FAQs individuales que cuelgan de esa categoría.
+ * Construye la lista plana de las opciones "hoja" del menú (las que ya
+ * tienen una respuesta instantánea y curada, sin pasar por el modelo de IA):
+ * los items de acción directa ('accion'), el botón que inicia cada flujo
+ * ('flujo' y el botón inicial de 'submenu_flujo'), y las FAQs/extras que
+ * cuelgan de cada 'submenu' o 'submenu_flujo'.
  *
  * Cada opción incluye "ruta": la numeración exacta tal como la ve el usuario
- * en el menú (ej. `8.- Dudas generales" -> "2.- Comisión y porcentaje`), para
+ * en el menú (ej. `5.- Agentes" -> "1.- Comisión y porcentaje`), para
  * poder decirle con precisión dónde hacer clic. El orden replica a propósito
- * el mismo que arma seleccionarCategoriaMenu() en brain.js (los "extra" de
- * ITEMS_MENU se muestran ANTES que las FAQs de BASE_CONOCIMIENTO), para que
- * el número nunca quede desfasado del botón real.
+ * el mismo que arma seleccionarCategoriaMenu() en brain.js (el botón de
+ * flujo, si existe, va primero; luego los "extra" de ITEMS_MENU; luego las
+ * FAQs de BASE_CONOCIMIENTO), para que el número nunca quede desfasado del
+ * botón real.
  * @returns {{id: string, label: string, ruta: string, textoBusqueda: string}[]}
  */
 function construirOpcionesMenu() {
@@ -40,8 +41,13 @@ function construirOpcionesMenu() {
                 ruta: `${numTop}.- ${cat.label}`,
                 textoBusqueda: `${cat.label}. ${cat.mensaje || ''}`
             });
-        } else if (cat.tipo === 'submenu') {
-            // Mismo orden que ve el usuario: extras primero, luego las FAQs.
+        } else if (cat.tipo === 'submenu' || cat.tipo === 'submenu_flujo') {
+            // Mismo orden que ve el usuario: en 'submenu_flujo' el botón que inicia el
+            // flujo va primero, luego los extras, luego las FAQs.
+            const flujoBtn = cat.tipo === 'submenu_flujo'
+                ? [{ id: cat.id, label: cat.flujoLabel || cat.label, textoBusqueda: `${cat.flujoLabel || cat.label}. ${cat.mensaje || ''}` }]
+                : [];
+
             const extras = (cat.extra || [])
                 .map(key => ITEMS_MENU[key])
                 .filter(Boolean)
@@ -51,7 +57,7 @@ function construirOpcionesMenu() {
                 .filter(f => f.categoria === cat.categoria)
                 .map(f => ({ id: f.id, label: f.label, textoBusqueda: `${f.label}. ${(f.tags || []).join(', ')}` }));
 
-            extras.concat(faqs).forEach((sub, j) => {
+            flujoBtn.concat(extras).concat(faqs).forEach((sub, j) => {
                 const numSub = j + 1;
                 opciones.push({
                     id: sub.id,
