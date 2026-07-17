@@ -94,10 +94,10 @@ async function cargarPendientes() {
             <textarea class="edit-respuesta">${escapeHtml(item.respuesta)}</textarea>
             ${item.menu_mention ? `
             <div id="menu-mention-${item.id}" class="menu-mention">
-                ℹ️ También se parece a la opción de menú "${escapeHtml(item.menu_mention.label)}"
+                ℹ️ También se parece a la opción de menú
                 (${escapeHtml(item.menu_mention.ruta)}) — similitud ${item.menu_mention.similitud}
             </div>` : ''}
-            <input type="text" class="edit-tags" value="${item.menu_mention ? escapeHtml(`${item.menu_mention.label} (${item.menu_mention.ruta})`) : ''}" placeholder="Posible categoría del menú (opcional)">
+            <input type="text" class="edit-tags" value="${item.menu_mention ? escapeHtml(item.menu_mention.ruta) : ''}" placeholder="Posible categoría del menú (opcional)">
             <div class="actions">
                 <button class="btn-success btn-aprobar">Aprobar y guardar en caché</button>
                 <button class="btn-danger btn-rechazar">Rechazar / eliminar</button>

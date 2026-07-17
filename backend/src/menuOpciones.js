@@ -56,7 +56,7 @@ function construirOpcionesMenu() {
                 opciones.push({
                     id: sub.id,
                     label: sub.label,
-                    ruta: `${numTop}.- ${cat.label}" -> "${numSub}.- ${sub.label}`,
+                    ruta: `${numTop}.- ${cat.label} -> ${numSub}.- ${sub.label}`,
                     textoBusqueda: sub.textoBusqueda
                 });
             });

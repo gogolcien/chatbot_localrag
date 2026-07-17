@@ -68,7 +68,6 @@ router.post('/chat', async (req, res) => {
         // el administrador la vea en el panel de revisión (id="menu-mention").
         const menuMention = (mejorOpcionMenu && mejorOpcionMenu.score >= config.menuMentionThreshold)
             ? {
-                label: mejorOpcionMenu.item.label,
                 ruta: mejorOpcionMenu.item.ruta,
                 similitud: Number(mejorOpcionMenu.score.toFixed(4))
             }

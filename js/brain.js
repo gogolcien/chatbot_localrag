@@ -58,7 +58,7 @@ async function consultarBackend(txt) {
         // informa como texto en la consola de interacción (#chat-box), a modo de dato.
         if (data.menu_mention) {
             setTimeout(() => {
-                log('SISTEMA', `ℹ️ Te recomiendo consultar dentro del menú de opciones "${data.menu_mention.label}" (${data.menu_mention.ruta}).`);
+                log('SISTEMA', `ℹ️ Te recomiendo consultar dentro del menú de opciones (${data.menu_mention.ruta}).`);
             }, 350);
         }
 
