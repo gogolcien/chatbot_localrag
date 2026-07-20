@@ -204,7 +204,7 @@ const MENU_PRINCIPAL = [
     { id: 'facturacion', icono: '📄', label: 'Facturación', tipo: 'accion', item: 'facturacion' },
     { id: 'cotizar', icono: '🏨', label: 'Cotizar precio de hoteles y circuitos', tipo: 'submenu_flujo', flujo: 'DESTINO', mensaje: '¿A qué destino viajan?', flujoLabel: 'Cotizar ahora', categoria: 'cotizar_faq' },
     { id: 'guia', icono: '📘', label: 'Guía para asesorar a tus clientes', tipo: 'submenu', categoria: 'guia_faq', extra: ['guia', 'publicidad'] },
-    { id: 'agentes', icono: '🧑\u200d💼', label: 'Agentes', tipo: 'submenu', categoria: 'agentes', extra: ['alta_usuarios', 'capacitacion', 'guia'] }
+    { id: 'agentes', icono: '🧑\u200d💼', label: 'Agentes', tipo: 'submenu', categoria: 'agentes', extra: ['alta_usuarios', 'capacitacion'] }
 ];
 
 // ================= AGENTES =================
