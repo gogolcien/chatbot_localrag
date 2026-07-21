@@ -67,7 +67,7 @@ async function consultarBackend(txt) {
         // interacción, a modo de dato (no como botón del menú).
         if (data.fuente === 'cache_semantico' && Array.isArray(data.tags) && data.tags.length > 0) {
             setTimeout(() => {
-                log('SISTEMA', `🏷️ Categoría: ${data.tags.join(', ')}`);
+                log('SISTEMA', `Te recomiendo consultar dentro del menú de opciones 🏷️ Categoría: ${data.tags.join(', ')}`);
             }, 350);
         }
 
@@ -246,9 +246,9 @@ function limpiarPanelMenu() {
 
 /** Construye y muestra los botones del primer nivel (las 8 categorías). */
 function renderBotonesMenuPrincipal() {
-    const botones = MENU_PRINCIPAL.map(cat => ({
+    const botones = MENU_PRINCIPAL.map((cat, i) => ({
         icono: cat.icono,
-        label: cat.label,
+        label: `${i + 1}.- ${cat.label}`,
         onClick: () => seleccionarCategoriaMenu(cat)
     }));
     mostrarBotones(botones);
@@ -307,6 +307,8 @@ function seleccionarCategoriaMenu(categoria) {
                 }
             });
         }
+
+        botones = botones.map((b, i) => ({ ...b, label: `${i + 1}.- ${b.label}` }));
 
         setTimeout(() => mostrarBotones(botones), 150);
         return;
