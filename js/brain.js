@@ -18,8 +18,8 @@ let datos = {
     fechaEntrada: null,
     fechaSalida: null,
     strEntrada: '',
+    noches: 0,
     habitaciones: 0,
-    habActual: 1,
     habData: []
 };
 
@@ -641,104 +641,28 @@ function cerebro(txt)
              let imagen_destino_completa='https://nuevo.sistemaimacop.com.mx/'+datos.imagenDestino;
                logDestinoVisual(destinoEncontrado, imagen_destino_completa);
 
-            estado = 'FECHA_IN';
-            hablar(`Perfecto, ${destinoEncontrado}. Fecha cuando inicia el viaje. (Ejemplo: 29 de julio).`);
+            estado = 'FECHA_UI';
+            hablar(`Perfecto, ${destinoEncontrado}. Selecciona tus fechas de viaje:`, () => {
+                mostrarSelectorFechas();
+            });
         } else {
             hablar(`No encontré "${txt}" en la base de datos. Intenta con otro.`);
         }
         return;
     }
 
-    if (estado === 'FECHA_IN') {
-        const fechaObj = parsearFecha(txt);
-        if (!fechaObj) {
-            hablar("No entendí la fecha. Intenta: Día y Mes.");
-            return;
-        }
-        let hoy = new Date(); hoy.setHours(0,0,0,0);
-        if (fechaObj < hoy) {
-            hablar("Esa fecha ya pasó. Dime una fecha futura.");
-            return;
-        }
-        datos.fechaEntrada = fechaObj;
-        datos.strEntrada = txt;
-        estado = 'FECHA_OUT';
-        hablar("Ok. Ahora dime la fecha cuando termina el viaje.");
+    if (estado === 'FECHA_UI') {
+        // Mientras el widget de fechas está activo no se procesa texto libre:
+        // el usuario debe usar los calendarios/botón "Continuar" de arriba.
+        hablar("Usa el calendario de arriba para elegir tus fechas de entrada y salida.", () => {});
         return;
     }
 
-    if (estado === 'FECHA_OUT') {
-        const fechaObj = parsearFecha(txt);
-        if (!fechaObj) {
-            hablar("Repite la fecha cuando termina el viaje.");
-            return;
-        }
-        if (fechaObj <= datos.fechaEntrada) {
-            hablar(`La fecha de cuando termina el viaje debe ser posterior a la fecha cuando inicia el viaje. Dime otra fecha.`);
-            return;
-        }
-        datos.fechaSalida = fechaObj;
-        estado = 'HABITACIONES';
-        hablar("Fechas correctas. ¿Cuántas habitaciones necesitan?");
+    if (estado === 'HABITACIONES_UI') {
+        // Mientras el widget de habitaciones está activo no se procesa texto libre:
+        // el usuario debe usar las tarjetas/botón "Continuar" de arriba.
+        hablar("Usa las tarjetas de arriba para indicar habitaciones, adultos y niños.", () => {});
         return;
-    }
-
-    if (estado === 'HABITACIONES') {
-        let cant = obtenerNumero(txt) || 1;
-        datos.habitaciones = cant;
-        datos.habActual = 1;
-        datos.habData = [];
-        for(let i=0; i<cant; i++) datos.habData.push({adultos:0, menores:0, edades:''});
-
-        estado = 'ADULTOS';
-        let preg = cant === 1 ? "¿Cuántos adultos van?" : "Habitación 1. ¿Cuántos adultos?";
-        hablar(preg);
-        return;
-    }
-
-    if (estado === 'ADULTOS') {
-        let num = obtenerNumero(txt);
-        if (num === 0) num = 2;
-        datos.habData[datos.habActual-1].adultos = num;
-
-        estado = 'MENORES';
-        hablar("¿Cuántos menores? (Escribe cero si no hay).");
-        return;
-    }
-
-    if (estado === 'MENORES') {
-        let num = obtenerNumero(txt);
-        if (num === 0) {
-            if (txt.includes('cero') || txt.includes('no') || txt.includes('ninguno') || txt.includes('nadie')) {
-                num = 0;
-            } else if (txt.includes('niño') || txt.includes('menor') || txt.includes('bebe') || txt.includes('hijo')) {
-                num = 1;
-            }
-        }
-        datos.habData[datos.habActual-1].menores = num;
-        if (num > 0) {
-            estado = 'EDADES';
-            hablar(`Entendido, ${num} menores. Dime sus edades.`);
-        } else {
-            siguienteHabitacion();
-        }
-        return;
-    }
-
-    if (estado === 'EDADES') {
-        datos.habData[datos.habActual-1].edades = txt;
-        siguienteHabitacion();
-        return;
-    }
-}
-
-function siguienteHabitacion() {
-    if (datos.habActual < datos.habitaciones) {
-        datos.habActual++;
-        estado = 'ADULTOS';
-        hablar(`Listo. Vamos con la habitación ${datos.habActual}. ¿Cuántos adultos?`);
-    } else {
-        finalizar('cotizar', null);
     }
 }
 
@@ -767,6 +691,375 @@ function parsearFecha(texto) {
     let anio = hoy.getFullYear();
     if (hoy.getMonth() > 8 && mes < 3) anio++;
     return new Date(anio, mes, dia);
+}
+
+// ================= WIDGET DE FECHAS (estilo formulario: entrada, salida, noches) =================
+
+/** Suma/resta días a una fecha en formato "yyyy-mm-dd" y devuelve el mismo formato. */
+function sumarDiasISO(fechaISO, dias) {
+    const f = new Date(fechaISO + 'T00:00:00');
+    f.setDate(f.getDate() + dias);
+    return f.toISOString().split('T')[0];
+}
+
+/** Diferencia en noches (días completos) entre dos fechas "yyyy-mm-dd". */
+function diffNochesISO(entradaISO, salidaISO) {
+    const a = new Date(entradaISO + 'T00:00:00');
+    const b = new Date(salidaISO + 'T00:00:00');
+    return Math.round((b - a) / 86400000);
+}
+
+/**
+ * Pinta en la consola de interacción (#chat-box) un widget tipo formulario con
+ * Fecha de entrada / Fecha de salida (calendarios nativos, formato dd/mm/aaaa)
+ * y Noches (select), sincronizados entre sí igual que en el módulo de cotización
+ * de referencia: cambiar una fecha recalcula noches, y cambiar noches recalcula
+ * la fecha de salida.
+ */
+function mostrarSelectorFechas() {
+    const box = document.getElementById('chat-box');
+    if (!box) return;
+
+    const hoy = new Date();
+    const hoyISO = hoy.toISOString().split('T')[0];
+    const salidaInicialISO = sumarDiasISO(hoyISO, 1);
+
+    let opcionesNoches = '';
+    for (let n = 1; n <= 30; n++) {
+        opcionesNoches += `<option value="${n}" ${n === 1 ? 'selected' : ''}>${n}</option>`;
+    }
+
+    box.innerHTML += `
+        <div class="text-left space-y-2 animate-fade-in" id="fecha-widget">
+            <span class="text-indigo-400 font-bold text-xs">BOT</span>
+
+            <div class="bg-white text-slate-800 rounded-xl p-4 space-y-3 max-w-xs shadow-lg">
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Fecha de entrada</label>
+                    <input type="date" id="fecha-entrada-input" min="${hoyISO}" value="${hoyISO}"
+                        class="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-500">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Fecha de salida</label>
+                    <input type="date" id="fecha-salida-input" min="${salidaInicialISO}" value="${salidaInicialISO}"
+                        class="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-500">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Noches</label>
+                    <select id="noches-select"
+                        class="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-500">
+                        ${opcionesNoches}
+                    </select>
+                </div>
+                <p id="fecha-error" class="text-xs text-red-600 hidden"></p>
+                <button id="btn-confirmar-fechas" type="button"
+                    class="w-full bg-red-600 hover:bg-red-500 text-white py-2 rounded-lg font-semibold text-sm transition">
+                    Continuar
+                </button>
+            </div>
+        </div>
+    `;
+    box.scrollTop = box.scrollHeight;
+
+    const inputEntrada = document.getElementById('fecha-entrada-input');
+    const inputSalida = document.getElementById('fecha-salida-input');
+    const selectNoches = document.getElementById('noches-select');
+    const btnConfirmar = document.getElementById('btn-confirmar-fechas');
+
+    // Cambiar la fecha de entrada: ajusta el mínimo de salida y recalcula noches
+    inputEntrada.addEventListener('change', () => {
+        if (!inputEntrada.value) return;
+        const minSalida = sumarDiasISO(inputEntrada.value, 1);
+        inputSalida.min = minSalida;
+        if (!inputSalida.value || inputSalida.value <= inputEntrada.value) {
+            inputSalida.value = sumarDiasISO(inputEntrada.value, parseInt(selectNoches.value) || 1);
+        }
+        const n = diffNochesISO(inputEntrada.value, inputSalida.value);
+        if (n >= 1 && n <= 30) selectNoches.value = n;
+    });
+
+    // Cambiar la fecha de salida: recalcula noches
+    inputSalida.addEventListener('change', () => {
+        if (!inputEntrada.value || !inputSalida.value) return;
+        const n = diffNochesISO(inputEntrada.value, inputSalida.value);
+        if (n >= 1 && n <= 30) selectNoches.value = n;
+    });
+
+    // Cambiar noches: recalcula la fecha de salida en automático
+    selectNoches.addEventListener('change', () => {
+        if (!inputEntrada.value) return;
+        const n = parseInt(selectNoches.value);
+        if (!n || n < 1 || n > 30) return;
+        inputSalida.value = sumarDiasISO(inputEntrada.value, n);
+    });
+
+    btnConfirmar.addEventListener('click', confirmarFechas);
+}
+
+/** Valida y confirma las fechas elegidas en el widget, luego avanza el flujo. */
+function confirmarFechas() {
+    const inputEntrada = document.getElementById('fecha-entrada-input');
+    const inputSalida = document.getElementById('fecha-salida-input');
+    const selectNoches = document.getElementById('noches-select');
+    const errorEl = document.getElementById('fecha-error');
+    const btnConfirmar = document.getElementById('btn-confirmar-fechas');
+    if (!inputEntrada || !inputSalida || !selectNoches) return;
+
+    errorEl.classList.add('hidden');
+
+    if (!inputEntrada.value || !inputSalida.value) {
+        errorEl.textContent = 'Selecciona ambas fechas.';
+        errorEl.classList.remove('hidden');
+        return;
+    }
+
+    const nochesVal = parseInt(selectNoches.value);
+    if (!nochesVal || nochesVal < 1 || nochesVal > 30) {
+        errorEl.textContent = 'Indica un número de noches válido (entre 1 y 30).';
+        errorEl.classList.remove('hidden');
+        return;
+    }
+
+    const fechaEntrada = new Date(inputEntrada.value + 'T00:00:00');
+    const fechaSalida = new Date(inputSalida.value + 'T00:00:00');
+    let hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+
+    if (fechaEntrada < hoy) {
+        errorEl.textContent = 'La fecha de entrada ya pasó. Elige una fecha futura.';
+        errorEl.classList.remove('hidden');
+        return;
+    }
+    if (fechaSalida <= fechaEntrada) {
+        errorEl.textContent = 'La fecha de salida debe ser posterior a la de entrada.';
+        errorEl.classList.remove('hidden');
+        return;
+    }
+
+    datos.fechaEntrada = fechaEntrada;
+    datos.fechaSalida = fechaSalida;
+    datos.strEntrada = fechaEntrada.toLocaleDateString('es-MX'); // formato dd/mm/aaaa
+    datos.noches = parseInt(selectNoches.value) || diffNochesISO(inputEntrada.value, inputSalida.value);
+
+    // Bloquear el widget una vez confirmado, para que no se pueda reenviar
+    const widget = document.getElementById('fecha-widget');
+    if (widget) {
+        widget.querySelectorAll('input, select, button').forEach(el => el.disabled = true);
+        btnConfirmar.innerText = '✓ Fechas confirmadas';
+        btnConfirmar.classList.remove('bg-red-600', 'hover:bg-red-500');
+        btnConfirmar.classList.add('bg-green-600', 'opacity-70', 'cursor-not-allowed');
+    }
+
+    estado = 'HABITACIONES_UI';
+    hablar(
+        `Perfecto: del ${fechaEntrada.toLocaleDateString('es-MX')} al ${fechaSalida.toLocaleDateString('es-MX')} ` +
+        `(${datos.noches} noche${datos.noches > 1 ? 's' : ''}). Ahora selecciona tus habitaciones:`,
+        () => mostrarSelectorHabitaciones()
+    );
+}
+
+// ================= WIDGET DE HABITACIONES (tarjetas: cantidad, adultos, niños, edades) =================
+// Nota: aquí solo se captura la ocupación (cuántas habitaciones, adultos, niños y edades).
+// Los tipos de habitación reales (foto, nombre, precio, amenidades) viven únicamente en la
+// página de resultados real, a la que se redirige al final vía mostrarBotonAbrir() dentro de
+// finalizar('cotizar', ...) — este widget no inventa ni muestra ese inventario.
+
+/** Pinta las tarjetas de "Habitación N" (adultos/niños/edades) dentro del contenedor dado. */
+function renderTarjetasHabitaciones(contenedor, cant) {
+    let opcionesAdultos = '';
+    for (let a = 1; a <= 8; a++) {
+        opcionesAdultos += `<option value="${a}" ${a === 2 ? 'selected' : ''}>${a}</option>`;
+    }
+    let opcionesNinos = '';
+    for (let n = 0; n <= 4; n++) {
+        opcionesNinos += `<option value="${n}" ${n === 0 ? 'selected' : ''}>${n}</option>`;
+    }
+
+    contenedor.innerHTML = '';
+    for (let i = 1; i <= cant; i++) {
+        contenedor.innerHTML += `
+            <div class="border border-slate-200 rounded-lg p-2.5 space-y-2" data-hab="${i}">
+                <p class="text-xs font-bold text-slate-600">Habitación ${i}</p>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Adultos</label>
+                    <select data-role="adultos" data-hab="${i}"
+                        class="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-500">
+                        ${opcionesAdultos}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Niños</label>
+                    <select data-role="ninos" data-hab="${i}"
+                        class="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-500">
+                        ${opcionesNinos}
+                    </select>
+                </div>
+                <div data-role="edades-contenedor" data-hab="${i}" class="space-y-1"></div>
+            </div>
+        `;
+    }
+
+    // Al cambiar "Niños" en una habitación, genera un campo de edad por cada menor
+    let opcionesEdad = '';
+    for (let ed = 0; ed <= 17; ed++) {
+        opcionesEdad += `<option value="${ed}" ${ed === 0 ? 'selected' : ''}>${ed}</option>`;
+    }
+
+    contenedor.querySelectorAll('select[data-role="ninos"]').forEach(selectNinos => {
+        selectNinos.addEventListener('change', () => {
+            const hab = selectNinos.getAttribute('data-hab');
+            const cantNinos = Math.max(0, parseInt(selectNinos.value) || 0);
+            const edadesContenedor = contenedor.querySelector(`[data-role="edades-contenedor"][data-hab="${hab}"]`);
+            edadesContenedor.innerHTML = '';
+            for (let e = 1; e <= cantNinos; e++) {
+                edadesContenedor.innerHTML += `
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Edad menor ${e}</label>
+                        <select data-role="edad" data-hab="${hab}" data-menor="${e}"
+                            class="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-500">
+                            ${opcionesEdad}
+                        </select>
+                    </div>
+                `;
+            }
+        });
+    });
+}
+
+/**
+ * Pinta en la consola de interacción (#chat-box) el widget de habitaciones: un campo
+ * "Habitaciones" (máx. 5) y una tarjeta por habitación con Adultos/Niños/Edades. A partir
+ * de 6 habitaciones se muestra el aviso de reservación grupal y se ofrece hablar con un
+ * agente en vez de continuar el flujo automático.
+ */
+function mostrarSelectorHabitaciones() {
+    const box = document.getElementById('chat-box');
+    if (!box) return;
+
+    box.innerHTML += `
+        <div class="text-left space-y-2 animate-fade-in" id="habitaciones-widget">
+            <span class="text-indigo-400 font-bold text-xs">BOT</span>
+
+            <div class="bg-white text-slate-800 rounded-xl p-4 space-y-3 max-w-xs shadow-lg">
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Habitaciones</label>
+                    <select id="hab-cantidad-input"
+                        class="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-500">
+                        <option value="1" selected>1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                        <option value="6">6 o más (grupal)</option>
+                    </select>
+                </div>
+                <p id="hab-grupal-msg" class="text-xs text-amber-600 hidden">
+                    A partir de 6 habitaciones esto se maneja como <b>reservación grupal</b>, con condiciones
+                    y tarifas especiales. Un agente debe atenderte directamente.
+                </p>
+                <div id="hab-tarjetas-container" class="space-y-3"></div>
+                <p id="hab-error" class="text-xs text-red-600 hidden"></p>
+                <button id="btn-confirmar-habitaciones" type="button"
+                    class="w-full bg-red-600 hover:bg-red-500 text-white py-2 rounded-lg font-semibold text-sm transition">
+                    Continuar
+                </button>
+                <button id="btn-hablar-agente" type="button"
+                    class="w-full bg-slate-700 hover:bg-slate-600 text-white py-2 rounded-lg font-semibold text-sm transition hidden">
+                    Hablar con un agente
+                </button>
+            </div>
+        </div>
+    `;
+    box.scrollTop = box.scrollHeight;
+
+    const inputCantidad = document.getElementById('hab-cantidad-input');
+    const contenedorTarjetas = document.getElementById('hab-tarjetas-container');
+    const msgGrupal = document.getElementById('hab-grupal-msg');
+    const errorEl = document.getElementById('hab-error');
+    const btnConfirmar = document.getElementById('btn-confirmar-habitaciones');
+    const btnAgente = document.getElementById('btn-hablar-agente');
+
+    function actualizarVistaPorCantidad() {
+        const cant = parseInt(inputCantidad.value) || 1;
+        errorEl.classList.add('hidden');
+
+        if (cant >= 6) {
+            msgGrupal.classList.remove('hidden');
+            contenedorTarjetas.innerHTML = '';
+            btnConfirmar.classList.add('hidden');
+            btnAgente.classList.remove('hidden');
+            return;
+        }
+
+        msgGrupal.classList.add('hidden');
+        btnConfirmar.classList.remove('hidden');
+        btnAgente.classList.add('hidden');
+        renderTarjetasHabitaciones(contenedorTarjetas, cant);
+    }
+
+    inputCantidad.addEventListener('change', actualizarVistaPorCantidad);
+    actualizarVistaPorCantidad(); // pinta la tarjeta inicial (1 habitación)
+
+    btnAgente.addEventListener('click', () => {
+        const widget = document.getElementById('habitaciones-widget');
+        if (widget) widget.querySelectorAll('input, select, button').forEach(el => el.disabled = true);
+        hablar(
+            `Detecté ${inputCantidad.value} habitaciones. A partir de 6 habitaciones esto se maneja como ` +
+            `<b>reservación grupal</b>, con condiciones y tarifas especiales. Un agente debe atenderte ` +
+            `directamente para armar esa cotización.`,
+            () => volverAMenu()
+        );
+    });
+
+    btnConfirmar.addEventListener('click', () => {
+        confirmarHabitaciones(inputCantidad, contenedorTarjetas, errorEl, btnConfirmar);
+    });
+}
+
+/** Valida las tarjetas de habitaciones, guarda los datos y continúa el flujo (finalizar). */
+function confirmarHabitaciones(inputCantidad, contenedorTarjetas, errorEl, btnConfirmar) {
+    errorEl.classList.add('hidden');
+    const cant = parseInt(inputCantidad.value) || 1;
+    const habData = [];
+
+    for (let i = 1; i <= cant; i++) {
+        const inputAdultos = contenedorTarjetas.querySelector(`select[data-role="adultos"][data-hab="${i}"]`);
+        const inputNinos = contenedorTarjetas.querySelector(`select[data-role="ninos"][data-hab="${i}"]`);
+        const adultos = parseInt(inputAdultos.value) || 0;
+        const ninos = parseInt(inputNinos.value) || 0;
+
+        if (adultos < 1) {
+            errorEl.textContent = `Habitación ${i}: indica al menos 1 adulto.`;
+            errorEl.classList.remove('hidden');
+            return;
+        }
+
+        let edades = [];
+        if (ninos > 0) {
+            const inputsEdad = contenedorTarjetas.querySelectorAll(`select[data-role="edad"][data-hab="${i}"]`);
+            if (inputsEdad.length < ninos) {
+                errorEl.textContent = `Habitación ${i}: indica la edad de cada menor.`;
+                errorEl.classList.remove('hidden');
+                return;
+            }
+            inputsEdad.forEach(inp => edades.push(parseInt(inp.value) || 0));
+        }
+
+        habData.push({ adultos, menores: ninos, edades: edades.join(', ') });
+    }
+
+    datos.habitaciones = cant;
+    datos.habData = habData;
+
+    // Bloquear el widget una vez confirmado, para que no se pueda reenviar
+    const widget = document.getElementById('habitaciones-widget');
+    if (widget) {
+        widget.querySelectorAll('input, select, button').forEach(el => el.disabled = true);
+        btnConfirmar.innerText = '✓ Habitaciones confirmadas';
+        btnConfirmar.classList.remove('bg-red-600', 'hover:bg-red-500');
+        btnConfirmar.classList.add('bg-green-600', 'opacity-70', 'cursor-not-allowed');
+    }
+
+    finalizar('cotizar', null);
 }
 
 function finalizar(tipo, payload) {
