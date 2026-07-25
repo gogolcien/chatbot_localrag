@@ -334,7 +334,27 @@ function log(user, msg) {
 const OVERLAY_DELAY_MS = 500;
 let overlayTimeoutId = null;
 
+// Bloquea el panel del menú de opciones (#menu-panel-content) para que no se pueda
+// hacer click en ningún botón mientras se está esperando la respuesta del backend/modelo.
+// Se llama en paralelo al overlay de procesando, pero sin el retraso de OVERLAY_DELAY_MS:
+// el bloqueo aplica desde el instante en que arranca la petición, aunque el overlay
+// visual tarde un poco más en aparecer.
+function bloquearMenuOpciones() {
+    const panel = document.getElementById('menu-panel-content');
+    if (!panel) return;
+    panel.querySelectorAll('button').forEach(btn => btn.disabled = true);
+    panel.classList.add('opacity-50', 'pointer-events-none');
+}
+
+function desbloquearMenuOpciones() {
+    const panel = document.getElementById('menu-panel-content');
+    if (!panel) return;
+    panel.querySelectorAll('button').forEach(btn => btn.disabled = false);
+    panel.classList.remove('opacity-50', 'pointer-events-none');
+}
+
 function mostrarOverlayProcesando() {
+    bloquearMenuOpciones();
     overlayTimeoutId = setTimeout(() => {
         const overlay = document.getElementById('overlay-procesando');
         if (overlay) overlay.classList.remove('hidden');
@@ -349,6 +369,7 @@ function ocultarOverlayProcesando() {
     }
     const overlay = document.getElementById('overlay-procesando');
     if (overlay) overlay.classList.add('hidden');
+    desbloquearMenuOpciones();
 }
 
 function hablar(texto, callback)
