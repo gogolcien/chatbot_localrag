@@ -1,127 +1,131 @@
-const fs = require('fs');
-const path = require('path');
+const pool = require('./db');
 const crypto = require('crypto');
-
-const DATA_DIR = path.join(__dirname, '..', 'data');
-const FILES = {
-    pendientes: path.join(DATA_DIR, 'pendientes.json'),
-    aprobadas: path.join(DATA_DIR, 'aprobadas.json')
-};
-
-function ensureFile(filePath) {
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    if (!fs.existsSync(filePath)) fs.writeFileSync(filePath, '[]', 'utf-8');
-}
-
-function readAll(name) {
-    const filePath = FILES[name];
-    ensureFile(filePath);
-    const raw = fs.readFileSync(filePath, 'utf-8');
-    try {
-        return JSON.parse(raw || '[]');
-    } catch (err) {
-        console.error(`[store] Error leyendo ${name}.json, se recupera como arreglo vacío:`, err.message);
-        return [];
-    }
-}
-
-// Escritura atómica: escribe a un archivo temporal y luego renombra,
-// para evitar corromper el JSON si el proceso se interrumpe a la mitad.
-function writeAll(name, items) {
-    const filePath = FILES[name];
-    ensureFile(filePath);
-    const tmpPath = `${filePath}.tmp`;
-    fs.writeFileSync(tmpPath, JSON.stringify(items, null, 2), 'utf-8');
-    fs.renameSync(tmpPath, filePath);
-}
 
 function newId() {
     return crypto.randomUUID();
 }
 
+// MySQL con mysql2 ya deserializa columnas JSON a objetos JS automáticamente
+// al leer, así que no hace falta JSON.parse manual en los selects.
+
 const store = {
     // ---------- PENDIENTES ----------
-    listPendientes() {
-        return readAll('pendientes').sort((a, b) => new Date(b.fecha_creacion) - new Date(a.fecha_creacion));
+    async listPendientes() {
+        const [rows] = await pool.query(
+            'SELECT * FROM pendientes ORDER BY fecha_creacion DESC'
+        );
+        return rows;
     },
-    addPendiente({ pregunta, pregunta_normalizada, respuesta, embedding, agente, contexto_usado, menu_mention }) {
-        const items = readAll('pendientes');
-        const item = {
-            id: newId(),
-            pregunta,
-            pregunta_normalizada,
-            respuesta,
+
+    async addPendiente({ pregunta, pregunta_normalizada, respuesta, embedding, agente, contexto_usado, menu_mention }) {
+        const id = newId();
+        const fecha_creacion = new Date();
+        await pool.query(
+            `INSERT INTO pendientes
+             (id, pregunta, pregunta_normalizada, respuesta, embedding, agente, contexto_usado, menu_mention, estado, fecha_creacion)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pendiente', ?)`,
+            [
+                id,
+                pregunta,
+                pregunta_normalizada,
+                respuesta,
+                embedding ? JSON.stringify(embedding) : null,
+                agente || null,
+                JSON.stringify(Array.isArray(contexto_usado) ? contexto_usado : []),
+                menu_mention ? JSON.stringify(menu_mention) : null,
+                fecha_creacion
+            ]
+        );
+        return {
+            id, pregunta, pregunta_normalizada, respuesta,
             embedding: embedding || null,
             agente: agente || null,
-            // Referencias (preguntas ya aprobadas) que se le dieron al modelo como contexto
-            // RAG para generar esta respuesta. Util para revisar en el panel de admin
-            // en que se baso el modelo, aunque no haya sido un hit exacto de cache.
             contexto_usado: Array.isArray(contexto_usado) ? contexto_usado : [],
-            // Opción del menú más parecida a la pregunta (si cruzó MENU_MENTION_THRESHOLD),
-            // para que el administrador la vea en el panel de revisión.
             menu_mention: menu_mention || null,
             estado: 'pendiente',
-            fecha_creacion: new Date().toISOString()
+            fecha_creacion: fecha_creacion.toISOString()
         };
-        items.push(item);
-        writeAll('pendientes', items);
-        return item;
     },
-    getPendiente(id) {
-        return readAll('pendientes').find(p => p.id === id) || null;
+
+    async getPendiente(id) {
+        const [rows] = await pool.query('SELECT * FROM pendientes WHERE id = ?', [id]);
+        return rows[0] || null;
     },
-    removePendiente(id) {
-        const items = readAll('pendientes');
-        const idx = items.findIndex(p => p.id === id);
-        if (idx === -1) return null;
-        const [removed] = items.splice(idx, 1);
-        writeAll('pendientes', items);
-        return removed;
+
+    async removePendiente(id) {
+        const existente = await store.getPendiente(id);
+        if (!existente) return null;
+        await pool.query('DELETE FROM pendientes WHERE id = ?', [id]);
+        return existente;
     },
 
     // ---------- APROBADAS (caché semántico) ----------
-    listAprobadas() {
-        return readAll('aprobadas').sort((a, b) => new Date(b.fecha_creacion) - new Date(a.fecha_creacion));
+    async listAprobadas() {
+        const [rows] = await pool.query(
+            'SELECT * FROM aprobadas ORDER BY fecha_creacion DESC'
+        );
+        return rows;
     },
-    addAprobada({ pregunta, pregunta_normalizada, respuesta, embedding, tags, origen }) {
-        const items = readAll('aprobadas');
-        const item = {
-            id: newId(),
-            pregunta,
-            pregunta_normalizada,
-            respuesta,
+
+    async addAprobada({ pregunta, pregunta_normalizada, respuesta, embedding, tags, origen }) {
+        const id = newId();
+        const fecha_creacion = new Date();
+        await pool.query(
+            `INSERT INTO aprobadas
+             (id, pregunta, pregunta_normalizada, respuesta, embedding, tags, origen, usos, fecha_creacion)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+            [
+                id,
+                pregunta,
+                pregunta_normalizada,
+                respuesta,
+                embedding ? JSON.stringify(embedding) : null,
+                JSON.stringify(Array.isArray(tags) ? tags : []),
+                origen || 'manual',
+                fecha_creacion
+            ]
+        );
+        return {
+            id, pregunta, pregunta_normalizada, respuesta,
             embedding: embedding || null,
             tags: Array.isArray(tags) ? tags : [],
-            origen: origen || 'manual', // 'modelo' (aprobada desde pendientes) | 'manual'
+            origen: origen || 'manual',
             usos: 0,
-            fecha_creacion: new Date().toISOString()
+            fecha_creacion: fecha_creacion.toISOString()
         };
-        items.push(item);
-        writeAll('aprobadas', items);
-        return item;
     },
-    updateAprobada(id, patch) {
-        const items = readAll('aprobadas');
-        const idx = items.findIndex(a => a.id === id);
-        if (idx === -1) return null;
-        items[idx] = { ...items[idx], ...patch, id: items[idx].id };
-        writeAll('aprobadas', items);
-        return items[idx];
+
+    async updateAprobada(id, patch) {
+        const existente = (await pool.query('SELECT * FROM aprobadas WHERE id = ?', [id]))[0][0];
+        if (!existente) return null;
+
+        const merged = { ...existente, ...patch };
+        await pool.query(
+            `UPDATE aprobadas SET
+             pregunta = ?, pregunta_normalizada = ?, respuesta = ?, embedding = ?, tags = ?
+             WHERE id = ?`,
+            [
+                merged.pregunta,
+                merged.pregunta_normalizada,
+                merged.respuesta,
+                merged.embedding ? JSON.stringify(merged.embedding) : null,
+                JSON.stringify(Array.isArray(merged.tags) ? merged.tags : []),
+                id
+            ]
+        );
+        return store.listAprobadas().then(items => items.find(a => a.id === id));
     },
-    removeAprobada(id) {
-        const items = readAll('aprobadas');
-        const idx = items.findIndex(a => a.id === id);
-        if (idx === -1) return null;
-        const [removed] = items.splice(idx, 1);
-        writeAll('aprobadas', items);
-        return removed;
+
+    async removeAprobada(id) {
+        const [rows] = await pool.query('SELECT * FROM aprobadas WHERE id = ?', [id]);
+        const existente = rows[0];
+        if (!existente) return null;
+        await pool.query('DELETE FROM aprobadas WHERE id = ?', [id]);
+        return existente;
     },
-    incrementUso(id) {
-        const items = readAll('aprobadas');
-        const idx = items.findIndex(a => a.id === id);
-        if (idx === -1) return;
-        items[idx].usos = (items[idx].usos || 0) + 1;
-        writeAll('aprobadas', items);
+
+    async incrementUso(id) {
+        await pool.query('UPDATE aprobadas SET usos = usos + 1 WHERE id = ?', [id]);
     }
 };
 

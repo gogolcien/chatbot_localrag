@@ -32,7 +32,14 @@ const config = {
     adminPassword: required('ADMIN_PASSWORD', 'admin'),
     sessionSecret: required('SESSION_SECRET', 'dev-secret-change-me'),
 
-    corsOrigin: required('CORS_ORIGIN', 'http://localhost:3000')
+    corsOrigin: required('CORS_ORIGIN', 'http://localhost:3000'),
+
+    // Conexión a MySQL
+    dbHost: required('DB_HOST', 'localhost'),
+    dbPort: parseInt(required('DB_PORT', '3306'), 10),
+    dbUser: required('DB_USER', 'root'),
+    dbPassword: required('DB_PASSWORD', ''),
+    dbName: required('DB_NAME', 'chatbot_localrag')
 };
 
 if (config.adminPassword === 'admin' || config.adminPassword === 'cambia-esta-contraseña') {

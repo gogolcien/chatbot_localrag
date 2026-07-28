@@ -25,23 +25,21 @@ router.get('/session', (req, res) => {
     res.json({ isAdmin: !!(req.session && req.session.isAdmin) });
 });
 
-// A partir de aquí, todo requiere sesión de administrador
 router.use(requireAuth);
 
 // ---------- PENDIENTES ----------
-router.get('/pendientes', (req, res) => {
-    res.json(store.listPendientes());
+router.get('/pendientes', async (req, res) => {
+    res.json(await store.listPendientes());
 });
 
-router.delete('/pendientes/:id', (req, res) => {
-    const removido = store.removePendiente(req.params.id);
+router.delete('/pendientes/:id', async (req, res) => {
+    const removido = await store.removePendiente(req.params.id);
     if (!removido) return res.status(404).json({ error: 'No encontrado.' });
     res.json({ ok: true });
 });
 
-// Aprobar un pendiente: lo mueve a "aprobadas" (permite editar pregunta/respuesta/tags antes de aprobar)
 router.post('/pendientes/:id/aprobar', async (req, res) => {
-    const pendiente = store.getPendiente(req.params.id);
+    const pendiente = await store.getPendiente(req.params.id);
     if (!pendiente) return res.status(404).json({ error: 'No encontrado.' });
 
     const pregunta = (req.body?.pregunta || pendiente.pregunta).trim();
@@ -49,13 +47,12 @@ router.post('/pendientes/:id/aprobar', async (req, res) => {
     const tags = Array.isArray(req.body?.tags) ? req.body.tags : [];
 
     try {
-        // Si el admin editó la pregunta, recalculamos el embedding; si no, reusamos el ya calculado.
         const preguntaCambio = pregunta !== pendiente.pregunta;
         const embedding = preguntaCambio || !pendiente.embedding
             ? await ollama.generarEmbedding(pregunta)
             : pendiente.embedding;
 
-        const aprobada = store.addAprobada({
+        const aprobada = await store.addAprobada({
             pregunta,
             pregunta_normalizada: normalizar(pregunta),
             respuesta,
@@ -64,7 +61,7 @@ router.post('/pendientes/:id/aprobar', async (req, res) => {
             origen: 'modelo'
         });
 
-        store.removePendiente(pendiente.id);
+        await store.removePendiente(pendiente.id);
         res.json(aprobada);
     } catch (err) {
         console.error('[admin] Error aprobando pendiente:', err.message);
@@ -73,11 +70,10 @@ router.post('/pendientes/:id/aprobar', async (req, res) => {
 });
 
 // ---------- APROBADAS (caché semántico) ----------
-router.get('/aprobadas', (req, res) => {
-    res.json(store.listAprobadas());
+router.get('/aprobadas', async (req, res) => {
+    res.json(await store.listAprobadas());
 });
 
-// Agregar manualmente una pregunta/respuesta externa directamente a "aprobadas"
 router.post('/aprobadas', async (req, res) => {
     const pregunta = (req.body?.pregunta || '').trim();
     const respuesta = (req.body?.respuesta || '').trim();
@@ -89,7 +85,7 @@ router.post('/aprobadas', async (req, res) => {
 
     try {
         const embedding = await ollama.generarEmbedding(pregunta);
-        const aprobada = store.addAprobada({
+        const aprobada = await store.addAprobada({
             pregunta,
             pregunta_normalizada: normalizar(pregunta),
             respuesta,
@@ -105,7 +101,8 @@ router.post('/aprobadas', async (req, res) => {
 });
 
 router.put('/aprobadas/:id', async (req, res) => {
-    const existente = store.listAprobadas().find(a => a.id === req.params.id);
+    const aprobadas = await store.listAprobadas();
+    const existente = aprobadas.find(a => a.id === req.params.id);
     if (!existente) return res.status(404).json({ error: 'No encontrado.' });
 
     const pregunta = (req.body?.pregunta || existente.pregunta).trim();
@@ -116,7 +113,7 @@ router.put('/aprobadas/:id', async (req, res) => {
         const preguntaCambio = pregunta !== existente.pregunta;
         const embedding = preguntaCambio ? await ollama.generarEmbedding(pregunta) : existente.embedding;
 
-        const actualizada = store.updateAprobada(req.params.id, {
+        const actualizada = await store.updateAprobada(req.params.id, {
             pregunta,
             pregunta_normalizada: normalizar(pregunta),
             respuesta,
@@ -130,8 +127,8 @@ router.put('/aprobadas/:id', async (req, res) => {
     }
 });
 
-router.delete('/aprobadas/:id', (req, res) => {
-    const removido = store.removeAprobada(req.params.id);
+router.delete('/aprobadas/:id', async (req, res) => {
+    const removido = await store.removeAprobada(req.params.id);
     if (!removido) return res.status(404).json({ error: 'No encontrado.' });
     res.json({ ok: true });
 });
