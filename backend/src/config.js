@@ -1,0 +1,57 @@
+require('dotenv').config();
+
+function required(name, fallback) {
+    const val = process.env[name];
+    if (val === undefined || val === '') return fallback;
+    return val;
+}
+
+// Para campos sensibles: si no está en .env, el servidor NO arranca.
+// Evita que credenciales de ejemplo terminen corriendo en producción por descuido.
+function requiredSecret(name) {
+    const val = process.env[name];
+    if (val === undefined || val === '') {
+        throw new Error(
+            `[config] Falta la variable de entorno obligatoria "${name}" en backend/.env. ` +
+            `El servidor no puede arrancar sin ella.`
+        );
+    }
+    return val;
+}
+
+const config = {
+    port: parseInt(required('PORT', '3000'), 10),
+
+    ollamaBaseUrl: required('OLLAMA_BASE_URL', 'http://127.0.0.1:11434'),
+    chatModel: required('OLLAMA_CHAT_MODEL', 'qwen3:8b'),
+    embedModel: required('OLLAMA_EMBED_MODEL', 'nomic-embed-text'),
+
+    similarityThreshold: parseFloat(required('SIMILARITY_THRESHOLD', '0.86')),
+
+    ragTopN: parseInt(required('RAG_TOP_N', '3'), 10),
+    ragMinScore: parseFloat(required('RAG_MIN_SCORE', '0.55')),
+
+    menuMentionThreshold: parseFloat(required('MENU_MENTION_THRESHOLD', '0.55')),
+
+    // Sensibles: sin fallback, deben venir de .env sí o sí
+    adminPassword: requiredSecret('ADMIN_PASSWORD'),
+    sessionSecret: requiredSecret('SESSION_SECRET'),
+
+    corsOrigin: required('CORS_ORIGIN', 'http://localhost:3000'),
+
+    // Conexión a MySQL
+    dbHost: required('DB_HOST', 'localhost'),
+    dbPort: parseInt(required('DB_PORT', '3306'), 10),
+    dbUser: requiredSecret('DB_USER'),
+    dbPassword: requiredSecret('DB_PASSWORD'),
+    dbName: required('DB_NAME', 'chatbot_localrag'),
+
+    // API externa de destinos (antes se llamaba directo desde el frontend con
+    // credenciales expuestas en el JS del cliente; ahora el backend hace la
+    // llamada y el frontend solo consulta /api/destinos en este mismo servidor).
+    destinosApiUrl: required('DESTINOS_API_URL', 'https://nuevo.sistemaimacop.com.mx/API/ApiDestinos'),
+    destinosApiUser: requiredSecret('DESTINOS_API_USER'),
+    destinosApiPassword: requiredSecret('DESTINOS_API_PASSWORD')
+};
+
+module.exports = config;

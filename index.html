@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="es">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Bot Operadora</title>
+        <link rel="stylesheet" href="./css/tailwind.css">
+        <link rel="stylesheet" href="./css/styles.css">
+    </head>
+    <body class="bg-slate-950 min-h-screen flex items-start justify-center text-white font-sans pt-6 md:pt-10 pb-6">
+        <div id="particles-js" class="fixed inset-0 w-full h-full z-0"></div>
+        <div class="relative z-10 w-full max-w-4xl flex flex-col md:flex-row gap-4 items-stretch justify-center px-4">
+
+            <!-- Panel vertical exclusivo para el menú de opciones (separado de la consola de interacción).
+                 Oculto hasta presionar "EMPEZAR" (ver iniciar() en brain.js). Ancho ajustado al
+                 contenido (md:w-fit) con un tope máximo (md:max-w-xs) para que no quede más ancho
+                 de lo que requiere la opción más larga. -->
+            <aside id="menu-panel" class="hidden order-1 w-full md:w-fit md:max-w-xs md:flex-shrink-0 bg-slate-900 rounded-2xl shadow-2xl border border-slate-700 overflow-hidden flex flex-col">
+                <div class="bg-gradient-to-b from-indigo-700 to-indigo-900 py-4 px-4 text-center flex-shrink-0">
+                    <p class="text-xs tracking-[0.2em] text-indigo-200 uppercase font-bold">Menú de Opciones</p>
+                </div>
+                <div id="menu-panel-content" class="flex-1 overflow-y-auto p-3 space-y-1.5 min-h-[120px] max-h-[300px] md:max-h-none">
+                    <p id="menu-panel-vacio" class="text-gray-500 text-center italic text-xs mt-4">Aún no hay opciones disponibles.</p>
+                </div>
+            </aside>
+
+            <div class="order-2 w-full max-w-lg bg-slate-900 rounded-2xl shadow-2xl border border-slate-700 overflow-hidden">
+
+            <div class="bg-gradient-to-b from-indigo-700 to-indigo-900 py-3 relative text-center">
+
+                <img src="./assets/logo.png"
+                    class="mx-auto w-24 md:w-28 drop-shadow-xl mb-1"
+                    alt="Logo">
+
+                <p class="text-xs tracking-[0.3em] text-indigo-200 uppercase">
+                    TU AGENTE IA
+                </p>
+            </div>
+
+            <div id="selector-agente" class="flex gap-6 justify-center px-3 pt-1 pb-3">
+                <button onclick="seleccionarAgente('ian')" class="bg-slate-800 hover:bg-indigo-600 p-4 rounded-xl">
+                    <img src="./assets/IAN.gif" alt="" class="w-44 md:w-52 mx-auto"><br>
+                    Ian<br><span class="text-xs text-gray-400">Chat de texto</span>
+                </button>
+
+                <button onclick="seleccionarAgente('mia')" class="bg-slate-800 hover:bg-pink-600 p-4 rounded-xl">
+                    <img src="./assets/MIA.gif" alt="" class="w-44 md:w-52 mx-auto"><br>
+                    Mia<br><span class="text-xs text-gray-400">Chat de texto</span>
+                </button>
+            </div>
+
+            <div id="bloque-avatar"   class="p-3 flex flex-col items-center relative min-h-[90px] hidden">
+                <img id="avatar-img"
+                    src="./assets/logo.png"
+                    onerror="this.onerror=null;this.src='./assets/logo.png'"
+                    class="bg-white w-28 h-16 object-contain">
+
+                <p id="estado-texto" class="text-indigo-300 font-mono text-sm uppercase tracking-widest mt-2">Cargando destinos...</p>
+            </div>
+
+            <div id="consola-interaccion" class="relative hidden">
+                <div class="bg-slate-950/50 h-[60vh] overflow-y-auto p-4 space-y-3 border-t border-slate-800" id="chat-box">
+                    <p class="text-gray-500 text-center italic text-xs">-- Consola de Interacción --</p>
+                </div>
+
+                <!-- Overlay de "procesando": cubre solo la consola de interacción mientras se espera
+                     la respuesta del modelo (nivel 3). Va fuera del área con scroll (#chat-box) para
+                     que siempre se vea en la zona visible, sin importar la posición del scroll.
+                     Oculto por defecto. -->
+                <div id="overlay-procesando" class="hidden absolute inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/90 backdrop-blur-sm text-center px-6">
+                    <div class="relative w-16 h-16 mb-5">
+                        <div class="absolute inset-0 rounded-full border-4 border-indigo-500/20"></div>
+                        <div class="absolute inset-0 rounded-full border-4 border-transparent border-t-indigo-400 animate-spin"></div>
+                        <img src="./assets/logo.png" alt="" class="absolute inset-0 m-auto w-7 h-7 object-contain opacity-90">
+                    </div>
+                    <p class="text-indigo-100 font-semibold text-sm md:text-base max-w-xs leading-relaxed">
+                        Espere un momento, estamos preparando para usted la información más precisa
+                    </p>
+                    <div class="flex gap-1.5 mt-4">
+                        <span class="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style="animation-delay:0ms"></span>
+                        <span class="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style="animation-delay:150ms"></span>
+                        <span class="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style="animation-delay:300ms"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="input-area" class="px-4 py-2 bg-slate-900 border-t border-slate-800 hidden">
+                <div class="flex gap-2">
+                    <input
+                        id="text-input"
+                        type="text"
+                        placeholder="Escribe tu mensaje..."
+                        disabled
+                        autocomplete="off"
+                        class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 disabled:opacity-50">
+                    <button
+                        id="btn-mic"
+                        type="button"
+                        disabled
+                        title="Hablar en vez de escribir"
+                        class="bg-slate-700 hover:bg-indigo-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-lg transition">
+                        <svg id="icono-mic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
+                            <path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Z"/>
+                            <path d="M19 11a1 1 0 1 0-2 0 5 5 0 0 1-10 0 1 1 0 1 0-2 0 7 7 0 0 0 6 6.92V20H9a1 1 0 1 0 0 2h6a1 1 0 1 0 0-2h-2v-2.08A7 7 0 0 0 19 11Z"/>
+                        </svg>
+                    </button>
+                    <button
+                        id="btn-send"
+                        disabled
+                        class="bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-semibold text-sm transition">
+                        Enviar
+                    </button>
+                </div>
+            </div>
+
+            <button id="btn-start" onclick="iniciar()" disabled class="w-full bg-gray-600 cursor-not-allowed py-4 font-bold text-lg transition opacity-50 hidden rounded-b-xl">
+                CARGANDO BASE DE DATOS...
+            </button>
+            </div>
+        </div>
+
+        <!--
+            Orden de carga importante:
+            1) data.js   -> define BASE_CONOCIMIENTO, AGENTES, VOZ_MASCULINA, VOZ_FEMENINA
+            2) brain.js  -> usa esas variables y define toda la lógica (cerebro, hablar, etc.)
+            3) particles.js (librería) + particles-config.js -> inicializa el fondo animado
+
+            https://canva.link/llokxedwoswddyk
+
+            -->
+        <script src="./js/destinos-guia.js"></script>
+        <script src="./js/data.js"></script>
+        <script src="./js/brain.js"></script>
+
+        <script src="https://cdn.jsdelivr.net/npm/particles.js@2.0.0/particles.min.js"></script>
+        <script src="./js/particles-config.js"></script>
+    </body>
+</html>
