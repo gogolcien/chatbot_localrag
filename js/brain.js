@@ -57,11 +57,12 @@ async function consultarBackend(txt) {
         const data = await res.json();
         ocultarOverlayProcesando();
 
-        // Si viene una confirmación de menú pendiente (ver más abajo, ya sea por
+        // Si viene una redirección de menú pendiente (ver más abajo, ya sea por
         // menu_mention o por menu_opcion), "volverAMenu()" no se dispara aquí: se
-        // dispararía en paralelo a la pregunta de confirmación y terminaría reactivando
-        // el input/menú (vía escuchar() y renderBotonesMenuPrincipal()) antes de que el
-        // usuario responda. En su lugar, se dispara solo al contestar Sí/No.
+        // dispararía en paralelo a dirigirAOpcionMenu() y terminaría reactivando el
+        // input/menú (vía escuchar() y renderBotonesMenuPrincipal()) por encima del
+        // flujo al que se está redirigiendo. Ese flujo es quien controla cuándo se
+        // vuelve al menú.
         const hayConfirmacionMenuPendiente = !!(data.menu_mention || data.menu_opcion);
 
         hablar(data.respuesta, () => {
@@ -71,24 +72,23 @@ async function consultarBackend(txt) {
         });
 
         // Si el backend detectó (en la respuesta del modelo) una opción de menú
-        // razonablemente parecida a la pregunta (MENU_MENTION_THRESHOLD), se le pregunta
-        // al usuario si es lo que buscaba y, si dice que sí, se le lleva directo a esa
-        // opción — mismo widget que se usa para el caché semántico.
+        // razonablemente parecida a la pregunta (MENU_MENTION_THRESHOLD), se le lleva
+        // directo a esa opción (sin preguntar Sí/No) — mismo efecto que si hubiera hecho
+        // click en el panel de menú.
         if (data.menu_mention) {
             setTimeout(() => {
-                mostrarConfirmacionMenu(data.menu_mention);
+                dirigirAOpcionMenu(data.menu_mention.id);
             }, 350);
         }
 
         // Cuando la respuesta viene del caché semántico (ya fue aprobada por un admin) y
         // tiene una categoría asignada que coincide con una opción real del menú, se le
-        // pregunta al usuario si es lo que buscaba y, si dice que sí, se le lleva directo
-        // a esa opción. Si el tag es texto libre sin coincidencia real, se muestra solo
-        // como dato informativo (comportamiento anterior).
+        // lleva directo a esa opción (sin preguntar Sí/No). Si el tag es texto libre sin
+        // coincidencia real, se muestra solo como dato informativo (comportamiento anterior).
         if (data.fuente === 'cache_semantico' && Array.isArray(data.tags) && data.tags.length > 0) {
             setTimeout(() => {
                 if (data.menu_opcion) {
-                    mostrarConfirmacionMenu(data.menu_opcion);
+                    dirigirAOpcionMenu(data.menu_opcion.id);
                 } else {
                     log('SISTEMA', `Te recomiendo consultar dentro del menú de opciones 🏷️ Categoría: ${data.tags.join(', ')}`);
                 }
@@ -2043,69 +2043,6 @@ function mostrarBotonAbrir(texto, url) {
 }
 
 /**
- * Pinta en la consola de interacción una pregunta de confirmación con botones Sí/No
- * cuando una respuesta del caché semántico trae una categoría que coincide con una
- * opción real del menú (menu_opcion, armado en el backend). Si el usuario confirma,
- * se le dirige directo a esa opción (mismo efecto que si la hubiera clickeado en el
- * panel de menú); si no, simplemente queda constancia de su respuesta.
- */
-function mostrarConfirmacionMenu(menuOpcion) {
-    const box = document.getElementById('chat-box');
-    if (!box) return;
-
-    box.innerHTML += `
-        <div class="text-left space-y-2 animate-fade-in">
-            <span class="text-indigo-400 font-bold text-xs">SISTEMA</span>
-
-            <div class="bg-slate-800 border border-indigo-500 rounded-xl p-3 space-y-2 max-w-xs">
-                <p class="text-sm text-white">${menuOpcion.icono ? `${menuOpcion.icono} ` : ''}<b>${menuOpcion.ruta}</b><br>¿Esta opción es lo que estabas buscando?</p>
-                <div class="flex gap-2">
-                    <button type="button" data-resp="si"
-                        class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded-lg font-semibold text-sm transition">
-                        Sí
-                    </button>
-                    <button type="button" data-resp="no"
-                        class="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-2 rounded-lg font-semibold text-sm transition">
-                        No
-                    </button>
-                </div>
-            </div>
-        </div>
-    `;
-    box.scrollTop = box.scrollHeight;
-
-    // Se bloquea el panel de menú lateral y el campo de texto mientras el usuario decide:
-    // no tendría sentido dejarlo navegar por otro lado, ni escribir otra pregunta que deje
-    // "viva" en apariencia esta confirmación sin que en realidad haga ya nada al presionarla.
-    bloquearMenuOpciones();
-    bloquearInputTexto();
-
-    // Igual que en los widgets de fechas/habitaciones: se busca dentro del nodo recién
-    // insertado, no con document.getElementById a secas, por si queda más de una de estas
-    // preguntas en el historial del chat.
-    const widget = box.lastElementChild;
-    const btnSi = widget.querySelector('[data-resp="si"]');
-    const btnNo = widget.querySelector('[data-resp="no"]');
-
-    btnSi.addEventListener('click', () => {
-        widget.querySelectorAll('button').forEach(b => b.disabled = true);
-        widget.classList.add('opacity-60');
-        desbloquearMenuOpciones();
-        desbloquearInputTexto();
-        dirigirAOpcionMenu(menuOpcion.id);
-    });
-
-    btnNo.addEventListener('click', () => {
-        widget.querySelectorAll('button').forEach(b => b.disabled = true);
-        widget.classList.add('opacity-60');
-        desbloquearMenuOpciones();
-        desbloquearInputTexto();
-        log('TU', 'No, gracias.');
-        volverAMenu();
-    });
-}
-
-/**
  * Lleva al usuario directo a una opción del menú por su id (misma respuesta que si
  * hubiera hecho click en el botón real): busca primero en las FAQ de BASE_CONOCIMIENTO,
  * luego el caso especial 'guia' (no tiene 'resp', su flujo vive en
@@ -2140,11 +2077,25 @@ function dirigirAOpcionMenu(id) {
         return;
     }
 
-    // Delegamos en seleccionarCategoriaMenu (ya hace su propio log('TU', ...)) para que
-    // cualquier tipo de categoría del primer nivel ('flujo', 'accion', 'submenu' o
-    // 'submenu_flujo') se comporte exactamente igual que un click real en el menú.
     const categoria = MENU_PRINCIPAL.find(cat => cat.id === id);
     if (categoria) {
+        // 'submenu_flujo' reutiliza el id de la categoría para su propio botón de
+        // flujo (ver construirOpcionesMenu en el backend: el flujoBtn se registra con
+        // id: cat.id). Por eso, si el id coincide con una categoría 'submenu_flujo',
+        // SIEMPRE se refiere a ese botón de flujo (p.ej. "Cotizar hotel" dentro de
+        // "Cotizar precio de hoteles y circuitos"), nunca a "abrir el submenú" en
+        // general. Se arranca el flujo directo, igual que el botón ▶️ dentro del
+        // submenú, en vez de delegar en seleccionarCategoriaMenu (que solo listaría
+        // las opciones del submenú sin iniciar nada).
+        if (categoria.tipo === 'submenu_flujo') {
+            log('TU', `▶️ ${categoria.flujoLabel || categoria.label}`);
+            iniciarFlujoMenu(categoria);
+            return;
+        }
+
+        // Para el resto de tipos ('flujo', 'accion', 'submenu') sí se delega en
+        // seleccionarCategoriaMenu (ya hace su propio log('TU', ...)), que se comporta
+        // igual que un click real en el menú.
         seleccionarCategoriaMenu(categoria);
         return;
     }
