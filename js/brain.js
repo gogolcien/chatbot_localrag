@@ -72,23 +72,28 @@ async function consultarBackend(txt) {
         });
 
         // Si el backend detectó (en la respuesta del modelo) una opción de menú
-        // razonablemente parecida a la pregunta (MENU_MENTION_THRESHOLD), se le lleva
-        // directo a esa opción (sin preguntar Sí/No) — mismo efecto que si hubiera hecho
+        // razonablemente parecida a la pregunta (MENU_MENTION_THRESHOLD), se le
+        // pregunta Sí/No antes de llevarlo a esa opción (ver mostrarConfirmacionOpcion).
+        // Solo si confirma "Sí" se ejecuta, con el mismo efecto que si hubiera hecho
         // click en el panel de menú.
         if (data.menu_mention) {
             setTimeout(() => {
-                dirigirAOpcionMenu(data.menu_mention.id);
+                mostrarConfirmacionOpcion(data.menu_mention.label, {
+                    onSi: () => dirigirAOpcionMenu(data.menu_mention.id)
+                });
             }, 350);
         }
 
         // Cuando la respuesta viene del caché semántico (ya fue aprobada por un admin) y
-        // tiene una categoría asignada que coincide con una opción real del menú, se le
-        // lleva directo a esa opción (sin preguntar Sí/No). Si el tag es texto libre sin
+        // tiene una categoría asignada que coincide con una opción real del menú, se
+        // pregunta Sí/No antes de llevarlo a esa opción. Si el tag es texto libre sin
         // coincidencia real, se muestra solo como dato informativo (comportamiento anterior).
         if (data.fuente === 'cache_semantico' && Array.isArray(data.tags) && data.tags.length > 0) {
             setTimeout(() => {
                 if (data.menu_opcion) {
-                    dirigirAOpcionMenu(data.menu_opcion.id);
+                    mostrarConfirmacionOpcion(data.menu_opcion.label, {
+                        onSi: () => dirigirAOpcionMenu(data.menu_opcion.id)
+                    });
                 } else {
                     log('SISTEMA', `Te recomiendo consultar dentro del menú de opciones 🏷️ Categoría: ${data.tags.join(', ')}`);
                 }
@@ -259,6 +264,71 @@ function mostrarBotones(botones) {
     });
 }
 
+/**
+ * Pinta en la consola de interacción (#chat-box) una confirmación Sí/No. Se usa desde
+ * consultarBackend() cuando el backend (caché semántico o modelo de IA) detecta que la
+ * pregunta de texto libre coincide con una opción real del menú: en vez de redirigir
+ * directo, se pregunta "¿esta opción es lo que buscabas?" y solo se ejecuta si el
+ * usuario confirma. Bloquea el campo de texto/micrófono generales mientras está
+ * pendiente de respuesta (igual que los demás widgets de la consola).
+ * - "Sí": llama a onSi(), que es quien decide cómo continuar.
+ * - "No": llama a onNo() si se pasa, y vuelve a dejar disponible el campo de texto.
+ */
+function mostrarConfirmacionOpcion(label, { onSi, onNo }) {
+    const box = document.getElementById('chat-box');
+    if (!box) return;
+
+    bloquearInputTexto();
+
+    box.innerHTML += `
+        <div class="text-left space-y-2 animate-fade-in" id="confirmacion-opcion-widget">
+            <span class="text-indigo-400 font-bold text-xs">BOT</span>
+
+            <div class="bg-white text-slate-800 rounded-xl p-4 space-y-3 max-w-xs shadow-lg">
+                <p class="text-sm">¿Esta opción es lo que buscabas: <strong>"${label}"</strong>?</p>
+                <div class="flex gap-2">
+                    <button id="btn-confirmar-opcion-si" type="button"
+                        class="flex-1 bg-green-600 hover:bg-green-500 text-white py-2 rounded-lg font-semibold text-sm transition">
+                        Sí
+                    </button>
+                    <button id="btn-confirmar-opcion-no" type="button"
+                        class="flex-1 bg-slate-300 hover:bg-slate-400 text-slate-800 py-2 rounded-lg font-semibold text-sm transition">
+                        No
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    box.scrollTop = box.scrollHeight;
+
+    const widget = box.lastElementChild;
+    const btnSi = widget.querySelector('#btn-confirmar-opcion-si');
+    const btnNo = widget.querySelector('#btn-confirmar-opcion-no');
+
+    btnSi.addEventListener('click', () => {
+        btnSi.disabled = true;
+        btnNo.disabled = true;
+        btnSi.innerText = '✓ Sí';
+        btnNo.classList.add('opacity-40');
+        log('TU', 'Sí');
+        onSi();
+    });
+
+    btnNo.addEventListener('click', () => {
+        btnSi.disabled = true;
+        btnNo.disabled = true;
+        btnNo.innerText = '✓ No';
+        btnSi.classList.add('opacity-40');
+        log('TU', 'No');
+        desbloquearInputTexto();
+        if (onNo) {
+            onNo();
+        } else {
+            hablar('Entendido. Escribe tu pregunta de otra forma o elige una opción del menú.', () => volverAMenu());
+        }
+    });
+}
+
 /** Limpia el panel de menú y vuelve a mostrar el mensaje de "sin opciones". */
 function limpiarPanelMenu() {
     const panel = document.getElementById('menu-panel-content');
@@ -290,6 +360,15 @@ function iniciarFlujoMenu(categoria) {
         // widgets de arriba. Se vuelven a habilitar en volverAMenu() al terminar.
         bloquearInputTexto();
         hablar(categoria.mensaje, () => mostrarSelectorDestino());
+        return;
+    }
+    if (categoria.flujo === 'PAGO') {
+        estado = 'PAGO_UI';
+        // Igual que en el flujo de cotización y en la guía interactiva: mientras se
+        // pide el GDL/localizador se bloquean el campo de texto y el micrófono
+        // generales, y se usa en su lugar el widget con su propio campo + micrófono.
+        bloquearInputTexto();
+        hablar(categoria.mensaje, () => mostrarCampoPago());
         return;
     }
     estado = categoria.flujo;
@@ -998,10 +1077,10 @@ function cerebro(txt)
         return;
     }
 
-    if (estado === 'PAGO') {
-        let nums = txt.replace(/\D/g, '');
-        if (nums) finalizar('pago', nums);
-        else hablar("Repite el número por favor.");
+    if (estado === 'PAGO_UI') {
+        // Mientras el widget de pago está activo no se procesa texto libre del chat
+        // general: el usuario debe escribir o dictar en el campo de arriba.
+        hablar("Usa el campo de arriba para escribir o dictar tu GDL o localizador.", () => {});
         return;
     }
 
@@ -1297,6 +1376,94 @@ function confirmarDestinoGuia(inputDestino, errorEl, btnConfirmar, widget) {
         `Consulta destinos, hoteles, habitaciones e instalaciones de ${destinoElegido.nombre} para asesorar mejor a tus clientes.`,
         `https://guiainteractivadehoteles.com/Destino/${destinoElegido.id}`
     );
+}
+
+// ================= WIDGET DE PAGO (pide el GDL/localizador) =================
+
+/** Pinta en la consola de interacción (#chat-box) el campo para escribir o dictar
+ *  el GDL/localizador, igual estilo que el selector de destino de la guía
+ *  interactiva (campo de texto + micrófono propio + botón "Continuar"). */
+function mostrarCampoPago() {
+    const box = document.getElementById('chat-box');
+    if (!box) return;
+
+    box.innerHTML += `
+        <div class="text-left space-y-2 animate-fade-in" id="pago-widget">
+            <span class="text-indigo-400 font-bold text-xs">BOT</span>
+
+            <div class="bg-white text-slate-800 rounded-xl p-4 space-y-3 max-w-xs shadow-lg">
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">GDL / Localizador</label>
+                    <div class="flex items-center gap-1.5">
+                        <input type="text" id="pago-input" autocomplete="off" inputmode="numeric"
+                            placeholder="Escribe el número de GDL o localizador"
+                            class="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-500">
+                        ${microfonoCampoHTML('pago-mic')}
+                    </div>
+                    ${capturaCampoHTML('pago-captura')}
+                </div>
+                <p id="pago-error" class="text-xs text-red-600 hidden"></p>
+                <button id="btn-confirmar-pago" type="button"
+                    class="w-full bg-red-600 hover:bg-red-500 text-white py-2 rounded-lg font-semibold text-sm transition">
+                    Continuar
+                </button>
+            </div>
+        </div>
+    `;
+    box.scrollTop = box.scrollHeight;
+
+    const widget = box.lastElementChild;
+    const inputPago = widget.querySelector('#pago-input');
+    const errorEl = widget.querySelector('#pago-error');
+    const btnConfirmar = widget.querySelector('#btn-confirmar-pago');
+    const btnMic = widget.querySelector('#pago-mic');
+    const capturaEl = widget.querySelector('#pago-captura');
+
+    inputPago.focus();
+
+    inputPago.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') confirmarPago(inputPago, errorEl, btnConfirmar, widget);
+    });
+
+    btnConfirmar.addEventListener('click', () => {
+        confirmarPago(inputPago, errorEl, btnConfirmar, widget);
+    });
+
+    // Micrófono del campo: solo dicta el GDL/localizador en el input (quedándose con
+    // los dígitos de lo dictado); la confirmación sigue siendo con el botón
+    // "Continuar" (clic o diciendo "continuar").
+    activarMicrofonoCampo({
+        btn: btnMic,
+        capturadoEl: capturaEl,
+        btnConfirmar: btnConfirmar,
+        onResultado: (transcript) => {
+            const nums = transcript.replace(/\D/g, '');
+            inputPago.value = nums || transcript;
+        }
+    });
+}
+
+/** Valida el GDL/localizador escrito o dictado (debe traer al menos un dígito) y, si es válido, continúa el flujo de pago. */
+function confirmarPago(inputPago, errorEl, btnConfirmar, widget) {
+    const texto = (inputPago.value || '').trim();
+    errorEl.classList.add('hidden');
+
+    const nums = texto.replace(/\D/g, '');
+    if (!nums) {
+        errorEl.textContent = 'Escribe o dicta el número de GDL o localizador.';
+        errorEl.classList.remove('hidden');
+        return;
+    }
+
+    if (widget) {
+        widget.querySelectorAll('input, button').forEach(el => el.disabled = true);
+        bloquearMicrofonosDelWidget(widget);
+        btnConfirmar.innerText = '✓ Localizador confirmado';
+        btnConfirmar.classList.remove('bg-red-600', 'hover:bg-red-500');
+        btnConfirmar.classList.add('bg-green-600', 'opacity-70', 'cursor-not-allowed');
+    }
+
+    finalizar('pago', nums);
 }
 
 // ================= WIDGET DE FECHAS (estilo formulario: entrada, salida, noches) =================
