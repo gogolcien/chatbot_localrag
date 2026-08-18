@@ -39,21 +39,21 @@
 
             <div id="selector-agente" class="flex gap-6 justify-center px-3 pt-1 pb-3">
                 <button onclick="seleccionarAgente('ian')" class="bg-slate-800 hover:bg-indigo-600 p-4 rounded-xl">
-                    <img src="./assets/IAN.gif" alt="" class="w-44 md:w-52 mx-auto"><br>
+                    <video src="./assets/IAN.webm" poster="./assets/logo.png" class="w-44 md:w-52 mx-auto" autoplay muted loop playsinline></video><br>
                     Ian<br><span class="text-xs text-gray-400">Chat de texto</span>
                 </button>
 
                 <button onclick="seleccionarAgente('mia')" class="bg-slate-800 hover:bg-pink-600 p-4 rounded-xl">
-                    <img src="./assets/MIA.gif" alt="" class="w-44 md:w-52 mx-auto"><br>
+                    <video src="./assets/MIA.webm" poster="./assets/logo.png" class="w-44 md:w-52 mx-auto" autoplay muted loop playsinline></video><br>
                     Mia<br><span class="text-xs text-gray-400">Chat de texto</span>
                 </button>
             </div>
 
             <div id="bloque-avatar"   class="p-3 flex flex-col items-center relative min-h-[90px] hidden">
-                <img id="avatar-img"
-                    src="./assets/logo.png"
-                    onerror="this.onerror=null;this.src='./assets/logo.png'"
-                    class="bg-white w-28 h-16 object-contain">
+                <video id="avatar-img"
+                    poster="./assets/logo.png"
+                    class="bg-white w-28 h-16 object-contain"
+                    autoplay muted loop playsinline></video>
 
                 <p id="estado-texto" class="text-indigo-300 font-mono text-sm uppercase tracking-widest mt-2">Cargando destinos...</p>
             </div>

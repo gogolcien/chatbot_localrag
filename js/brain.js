@@ -2,10 +2,11 @@ let AGENTE_ACTIVO = null;
 let AUTO_INICIAR_PENDIENTE = false; // true si el usuario ya eligió agente pero aún no cargan los destinos
 
 // ================= CONFIGURACIÓN =================
-// Valores por defecto antes de elegir agente (IAN/MIA): apuntan a un archivo que sí
-// existe (logo.png) para evitar 404s en la carga inicial de la página. En cuanto el
-// usuario elige agente, seleccionarAgente() sobreescribe esto con AGENTES[tipo].avatar
-// (./assets/IAN.gif o ./assets/MIA.gif).
+// Valores por defecto antes de elegir agente (IAN/MIA). #avatar-img es un <video>, así
+// que estos valores nunca llegan a asignarse como src real (bloque-avatar permanece
+// oculto hasta seleccionarAgente(), que sobreescribe esto con AGENTES[tipo].avatar antes
+// de mostrarlo). Si algún día se muestra sin haber elegido agente, el atributo
+// poster="./assets/logo.png" del <video> se sigue viendo igual como respaldo.
 AVATAR = {
     neutral: './assets/logo.png',
     hablar: './assets/logo.png',
@@ -184,23 +185,34 @@ function validarDestino(textoUsuario) {
 
 // ================= INTERFAZ =================
 function setAvatar(tipo) {
-    const img = document.getElementById('avatar-img');
+    const video = document.getElementById('avatar-img');
     const txt = document.getElementById('estado-texto');
-    img.className = "w-24 h-24 object-contain border-4 border-indigo-500 bg-white shadow-xl transition-all duration-200";
+    video.className = "w-24 h-24 object-contain border-4 border-indigo-500 bg-white shadow-xl transition-all duration-200";
 
+    let src;
     if (tipo === 'hablar') {
-        img.src = AVATAR.hablar;
-        img.classList.add('hablando');
+        src = AVATAR.hablar;
+        video.classList.add('hablando');
         txt.innerText = "RESPONDIENDO...";
     } else if (tipo === 'pensar') {
-        img.src = AVATAR.pensar;
+        src = AVATAR.pensar;
         txt.innerText = "PROCESANDO...";
     } else if (tipo === 'exito') {
-        img.src = AVATAR.exito;
+        src = AVATAR.exito;
         txt.innerText = "TERMINADO";
     } else {
-        img.src = AVATAR.neutral;
+        src = AVATAR.neutral;
         txt.innerText = "ESCRIBE TU DUDA...";
+    }
+
+    // Los 4 estados de un mismo agente comparten un único archivo .webm (igual que antes
+    // con el .gif), así que solo hace falta recargar el <video> cuando de verdad cambia
+    // el archivo (p.ej. al cambiar de IAN a MIA), no en cada cambio de estado.
+    const srcAbsoluto = new URL(src, window.location.href).href;
+    if (video.currentSrc !== srcAbsoluto) {
+        video.src = src;
+        video.load();
+        video.play().catch(() => {}); // el navegador puede bloquear el autoplay; no es crítico
     }
 }
 
