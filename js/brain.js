@@ -84,7 +84,7 @@ async function consultarBackend(txt) {
             setTimeout(() => {
                 mostrarConfirmacionOpcion(opcionSugerida.label, {
                     onSi: () => {
-                        mostrarRespuestaIA(() => dirigirAOpcionMenu(opcionSugerida.id));
+                        mostrarRespuestaIA(() => dirigirAOpcionMenu(opcionSugerida.id, { silencioso: true }));
                     }
                 });
             }, 350);
@@ -369,8 +369,8 @@ function iniciarFlujoMenu(categoria) {
 }
 
 /** Maneja el click de una categoría del primer nivel según su tipo. */
-function seleccionarCategoriaMenu(categoria) {
-    log('TU', `${categoria.icono} ${categoria.label}`);
+function seleccionarCategoriaMenu(categoria, { silencioso = false } = {}) {
+    if (!silencioso) log('TU', `${categoria.icono} ${categoria.label}`);
 
     if (categoria.tipo === 'flujo') {
         iniciarFlujoMenu(categoria);
@@ -2211,10 +2211,14 @@ function mostrarBotonAbrir(texto, url) {
  * cubrir TODOS sus tipos ('flujo', 'accion', 'submenu', 'submenu_flujo') exactamente
  * igual que si el usuario hubiera hecho click real en el panel de menú.
  */
-function dirigirAOpcionMenu(id) {
+function dirigirAOpcionMenu(id, { silencioso = false } = {}) {
+    // `silencioso` evita repetir un log('TU', ...) con el nombre de la opción: se usa
+    // cuando quien llama (p.ej. la confirmación Sí/No de consultarBackend) ya dejó
+    // constancia de la elección del usuario por otro medio (el propio widget de
+    // confirmación ya mostró "TU: Sí"), así que loguear aquí el label sería redundante.
     const itemFaq = BASE_CONOCIMIENTO.find(f => f.id === id);
     if (itemFaq) {
-        log('TU', itemFaq.label);
+        if (!silencioso) log('TU', itemFaq.label);
         responderItem(itemFaq);
         return;
     }
@@ -2223,7 +2227,7 @@ function dirigirAOpcionMenu(id) {
     // y mostrar la guía interactiva (igual que en el submenú, ver seleccionarCategoriaMenu).
     if (id === 'guia' && ITEMS_MENU.guia) {
         const item = ITEMS_MENU.guia;
-        log('TU', `📘 ${item.label}`);
+        if (!silencioso) log('TU', `📘 ${item.label}`);
         estado = 'GUIA_DESTINO_UI';
         bloquearInputTexto();
         hablar('¿De qué destino te gustaría ver la guía interactiva?', () => mostrarSelectorDestinoGuia());
@@ -2232,7 +2236,7 @@ function dirigirAOpcionMenu(id) {
 
     const itemExtra = ITEMS_MENU[id];
     if (itemExtra) {
-        log('TU', itemExtra.label);
+        if (!silencioso) log('TU', itemExtra.label);
         responderItem(itemExtra);
         return;
     }
@@ -2248,7 +2252,7 @@ function dirigirAOpcionMenu(id) {
         // submenú, en vez de delegar en seleccionarCategoriaMenu (que solo listaría
         // las opciones del submenú sin iniciar nada).
         if (categoria.tipo === 'submenu_flujo') {
-            log('TU', `▶️ ${categoria.flujoLabel || categoria.label}`);
+            if (!silencioso) log('TU', `▶️ ${categoria.flujoLabel || categoria.label}`);
             iniciarFlujoMenu(categoria);
             return;
         }
@@ -2256,7 +2260,7 @@ function dirigirAOpcionMenu(id) {
         // Para el resto de tipos ('flujo', 'accion', 'submenu') sí se delega en
         // seleccionarCategoriaMenu (ya hace su propio log('TU', ...)), que se comporta
         // igual que un click real en el menú.
-        seleccionarCategoriaMenu(categoria);
+        seleccionarCategoriaMenu(categoria, { silencioso });
         return;
     }
 
