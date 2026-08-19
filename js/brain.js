@@ -2,11 +2,10 @@ let AGENTE_ACTIVO = null;
 let AUTO_INICIAR_PENDIENTE = false; // true si el usuario ya eligió agente pero aún no cargan los destinos
 
 // ================= CONFIGURACIÓN =================
-// Valores por defecto antes de elegir agente (IAN/MIA). #avatar-img es un <video>, así
-// que estos valores nunca llegan a asignarse como src real (bloque-avatar permanece
-// oculto hasta seleccionarAgente(), que sobreescribe esto con AGENTES[tipo].avatar antes
-// de mostrarlo). Si algún día se muestra sin haber elegido agente, el atributo
-// poster="./assets/logo.png" del <video> se sigue viendo igual como respaldo.
+// Valores por defecto antes de elegir agente (IAN/MIA): apuntan a un archivo que sí
+// existe (logo.png) para evitar 404s en la carga inicial de la página. En cuanto el
+// usuario elige agente, seleccionarAgente() sobreescribe esto con AGENTES[tipo].avatar
+// (./assets/IAN.gif o ./assets/MIA.gif).
 AVATAR = {
     neutral: './assets/logo.png',
     hablar: './assets/logo.png',
@@ -58,54 +57,47 @@ async function consultarBackend(txt) {
         const data = await res.json();
         ocultarOverlayProcesando();
 
-        // Si viene una redirección de menú pendiente (ver más abajo, ya sea por
-        // menu_mention o por menu_opcion), "volverAMenu()" no se dispara aquí: se
-        // dispararía en paralelo a dirigirAOpcionMenu() y terminaría reactivando el
-        // input/menú (vía escuchar() y renderBotonesMenuPrincipal()) por encima del
-        // flujo al que se está redirigiendo. Ese flujo es quien controla cuándo se
-        // vuelve al menú.
-        const hayConfirmacionMenuPendiente = !!(data.menu_mention || data.menu_opcion);
+        // Si el backend detectó una opción de menú razonablemente parecida a la pregunta
+        // (menu_mention del modelo, o menu_opcion desde el caché semántico), la respuesta
+        // de la IA NO se muestra todavía: primero se pregunta "¿esta opción es lo que
+        // buscabas?" (ver mostrarConfirmacionOpcion) y solo se revela si el usuario confirma
+        // con "Sí" (además de redirigirlo a esa opción, con el mismo efecto que si hubiera
+        // hecho click en el panel de menú). Si responde "No", la respuesta de la IA nunca
+        // llega a mostrarse: mostrarConfirmacionOpcion ya se encarga del mensaje de
+        // fallback y de volver al menú.
+        const opcionSugerida = data.menu_mention
+            || (data.fuente === 'cache_semantico' && data.menu_opcion ? data.menu_opcion : null);
 
-        hablar(data.respuesta, () => {
-            if (!hayConfirmacionMenuPendiente) {
-                volverAMenu();
+        // Muestra la respuesta de la IA (y, si aplica, el aviso de "pendiente de revisión").
+        // `callback` decide qué pasa después de mostrarla; por defecto vuelve al menú.
+        function mostrarRespuestaIA(callback) {
+            hablar(data.respuesta, callback || (() => volverAMenu()));
+
+            if (data.pendiente_revision) {
+                setTimeout(() => {
+                    log('SISTEMA', 'ℹ️ Esta respuesta fue generada por IA y quedó pendiente de revisión por un administrador.');
+                }, 350);
             }
-        });
+        }
 
-        // Si el backend detectó (en la respuesta del modelo) una opción de menú
-        // razonablemente parecida a la pregunta (MENU_MENTION_THRESHOLD), se le
-        // pregunta Sí/No antes de llevarlo a esa opción (ver mostrarConfirmacionOpcion).
-        // Solo si confirma "Sí" se ejecuta, con el mismo efecto que si hubiera hecho
-        // click en el panel de menú.
-        if (data.menu_mention) {
+        if (opcionSugerida) {
             setTimeout(() => {
-                mostrarConfirmacionOpcion(data.menu_mention.label, {
-                    onSi: () => dirigirAOpcionMenu(data.menu_mention.id)
+                mostrarConfirmacionOpcion(opcionSugerida.label, {
+                    onSi: () => {
+                        mostrarRespuestaIA(() => dirigirAOpcionMenu(opcionSugerida.id));
+                    }
                 });
             }, 350);
-        }
+        } else {
+            mostrarRespuestaIA();
 
-        // Cuando la respuesta viene del caché semántico (ya fue aprobada por un admin) y
-        // tiene una categoría asignada que coincide con una opción real del menú, se
-        // pregunta Sí/No antes de llevarlo a esa opción. Si el tag es texto libre sin
-        // coincidencia real, se muestra solo como dato informativo (comportamiento anterior).
-        if (data.fuente === 'cache_semantico' && Array.isArray(data.tags) && data.tags.length > 0) {
-            setTimeout(() => {
-                if (data.menu_opcion) {
-                    mostrarConfirmacionOpcion(data.menu_opcion.label, {
-                        onSi: () => dirigirAOpcionMenu(data.menu_opcion.id)
-                    });
-                } else {
+            // Sin coincidencia real con una opción del menú: la categoría del caché
+            // semántico se muestra solo como dato informativo (comportamiento anterior).
+            if (data.fuente === 'cache_semantico' && Array.isArray(data.tags) && data.tags.length > 0) {
+                setTimeout(() => {
                     log('SISTEMA', `Te recomiendo consultar dentro del menú de opciones 🏷️ Categoría: ${data.tags.join(', ')}`);
-                }
-            }, 350);
-        }
-
-        // Aviso discreto cuando la respuesta viene del modelo y está pendiente de revisión
-        if (data.pendiente_revision) {
-            setTimeout(() => {
-                log('SISTEMA', 'ℹ️ Esta respuesta fue generada por IA y quedó pendiente de revisión por un administrador.');
-            }, 350);
+                }, 350);
+            }
         }
     } catch (err) {
         ocultarOverlayProcesando();
@@ -185,34 +177,23 @@ function validarDestino(textoUsuario) {
 
 // ================= INTERFAZ =================
 function setAvatar(tipo) {
-    const video = document.getElementById('avatar-img');
+    const img = document.getElementById('avatar-img');
     const txt = document.getElementById('estado-texto');
-    video.className = "w-24 h-24 object-contain border-4 border-indigo-500 bg-white shadow-xl transition-all duration-200";
+    img.className = "w-24 h-24 object-contain border-4 border-indigo-500 bg-white shadow-xl transition-all duration-200";
 
-    let src;
     if (tipo === 'hablar') {
-        src = AVATAR.hablar;
-        video.classList.add('hablando');
+        img.src = AVATAR.hablar;
+        img.classList.add('hablando');
         txt.innerText = "RESPONDIENDO...";
     } else if (tipo === 'pensar') {
-        src = AVATAR.pensar;
+        img.src = AVATAR.pensar;
         txt.innerText = "PROCESANDO...";
     } else if (tipo === 'exito') {
-        src = AVATAR.exito;
+        img.src = AVATAR.exito;
         txt.innerText = "TERMINADO";
     } else {
-        src = AVATAR.neutral;
+        img.src = AVATAR.neutral;
         txt.innerText = "ESCRIBE TU DUDA...";
-    }
-
-    // Los 4 estados de un mismo agente comparten un único archivo .webm (igual que antes
-    // con el .gif), así que solo hace falta recargar el <video> cuando de verdad cambia
-    // el archivo (p.ej. al cambiar de IAN a MIA), no en cada cambio de estado.
-    const srcAbsoluto = new URL(src, window.location.href).href;
-    if (video.currentSrc !== srcAbsoluto) {
-        video.src = src;
-        video.load();
-        video.play().catch(() => {}); // el navegador puede bloquear el autoplay; no es crítico
     }
 }
 
