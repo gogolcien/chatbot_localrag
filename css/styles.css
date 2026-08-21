@@ -1,6 +1,17 @@
 #avatar-img { transition: transform 0.1s; }
 .hablando { transform: scale(1.1); filter: brightness(1.1); }
 
+/* Fix de nitidez para <video>: en Chrome/Edge (Windows), al achicar la ventana
+   el navegador a veces renderiza el video por una ruta de "overlay" por hardware
+   que escala sin suavizado (se ve pixelado). Aplicar cualquier filtro CSS -aunque
+   sea neutro- fuerza al navegador a componer el video por la ruta normal, que sí
+   suaviza el escalado. No cambia el aspecto del video, solo cómo se dibuja. */
+.avatar-video {
+    filter: saturate(1);
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+}
+
 @keyframes fadeIn {
     from { opacity:0; transform: translateY(10px); }
     to { opacity:1; transform: translateY(0); }

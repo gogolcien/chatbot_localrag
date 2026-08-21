@@ -101,9 +101,11 @@ async function consultarBackend(txt) {
         }
     } catch (err) {
         ocultarOverlayProcesando();
+        // El detalle técnico solo va a la consola (para depuración); al usuario se le
+        // muestra un mensaje genérico, sin mencionar backend/Ollama ni nada de infraestructura.
         console.error('Error consultando backend:', err);
         hablar(
-            "No pude conectarme con el asistente de IA local. Verifica que el backend y Ollama estén corriendo, o intenta con: Cotizar, Subir Pago o Facturar.",
+            "Tuvimos un problema para responder tu pregunta. Intenta de nuevo en un momento, o elige una opción del menú: Cotizar, Subir Pago o Facturar.",
             () => volverAMenu()
         );
     }
@@ -439,6 +441,19 @@ function seleccionarCategoriaMenu(categoria, { silencioso = false } = {}) {
     }
 }
 
+// Escapa HTML (<, >, &, comillas) para que un texto se pueda insertar de forma segura
+// dentro de innerHTML sin que el navegador lo interprete como etiquetas/atributos.
+// Se usa para todo texto que venga directo del usuario (lo que escribe o dicta por voz)
+// antes de pasarlo a log(), ya que log() usa innerHTML para poder mostrar el formato
+// (negritas, etc.) de los mensajes del bot que sí están controlados por nuestro propio
+// código. Sin este escape, alguien podría escribir HTML/JS (p.ej. "<img src=x onerror=...>")
+// en el chat y el navegador lo ejecutaría (XSS).
+function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
 function log(user, msg) {
     const box = document.getElementById('chat-box');
     const color = user === 'BOT' ? 'text-indigo-400' : 'text-green-400';
@@ -564,7 +579,9 @@ function enviarTexto() {
     const btnMic = document.getElementById('btn-mic');
     if (btnMic) btnMic.disabled = true;
 
-    log('TU', texto);
+    // Se escapa antes de mostrarlo porque log() usa innerHTML: `texto` viene directo del
+    // usuario (escrito o dictado por voz) y no debe poder inyectar HTML/JS en el chat.
+    log('TU', escapeHtml(texto));
     input.value = '';
     setAvatar('pensar');
 
