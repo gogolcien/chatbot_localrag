@@ -122,7 +122,8 @@
         <!--
             Orden de carga importante:
             1) data.js   -> define BASE_CONOCIMIENTO, AGENTES, VOZ_MASCULINA, VOZ_FEMENINA
-            2) brain.js  -> usa esas variables y define toda la lógica (cerebro, hablar, etc.)
+            2) js/brain/*.js -> usa esas variables y define toda la lógica (cerebro, hablar, etc.),
+                                 dividida en varios archivos por responsabilidad
             3) particles.js (librería) + particles-config.js -> inicializa el fondo animado
 
             https://canva.link/llokxedwoswddyk
@@ -130,7 +131,23 @@
             -->
         <script src="./js/destinos-guia.js"></script>
         <script src="./js/data.js"></script>
-        <script src="./js/brain.js"></script>
+
+        <!-- brain.js se dividió en varios archivos por responsabilidad (ver js/brain/).
+             El orden importa poco en tiempo de ejecución (todo corre en callbacks/eventos
+             que se disparan después de cargar todos los scripts), pero se mantiene este
+             orden por claridad: config -> datos -> ui -> voz -> core -> widgets -> flujo final. -->
+        <script src="./js/brain/config.js"></script>
+        <script src="./js/brain/datos-utils.js"></script>
+        <script src="./js/brain/ui-menu.js"></script>
+        <script src="./js/brain/overlay-voz.js"></script>
+        <script src="./js/brain/mic-campo.js"></script>
+        <script src="./js/brain/core.js"></script>
+        <script src="./js/brain/widget-destino.js"></script>
+        <script src="./js/brain/widget-pago.js"></script>
+        <script src="./js/brain/widget-fechas.js"></script>
+        <script src="./js/brain/widget-habitaciones.js"></script>
+        <script src="./js/brain/widget-preferencias.js"></script>
+        <script src="./js/brain/flujo-final.js"></script>
 
         <script src="https://cdn.jsdelivr.net/npm/particles.js@2.0.0/particles.min.js"></script>
         <script src="./js/particles-config.js"></script>

@@ -2,8 +2,9 @@ const express = require('express');
 const store = require('../store');
 const config = require('../config');
 const ollama = require('../ollama');
-const { normalizar, buscarMasParecido, buscarTopN } = require('../similarity');
+const { normalizar, buscarMasParecido, buscarTopN, buscarMasParecidoHibrido } = require('../similarity');
 const { obtenerOpcionesMenuConEmbedding } = require('../menuOpciones');
+const spellfix = require('../spellfix');
 const rateLimit = require('express-rate-limit'); 
 
 const router = express.Router();
@@ -78,36 +79,99 @@ router.post('/chat', chatLimiter, async (req, res) => {
     const preguntaNormalizada = normalizar(pregunta);
 
     try {
-        const embeddingPregunta = await ollama.generarEmbedding(pregunta);
-
-        let mejorOpcionMenu = null;
+        // Se traen antes del embedding porque Capa 1 (spellfix) necesita el
+        // vocabulario de dominio, y Capa 2 (score híbrido) necesita comparar
+        // contra pregunta_normalizada de cada aprobada.
+        const aprobadas = await store.listAprobadas();
         let opcionesMenu = [];
         try {
             opcionesMenu = await obtenerOpcionesMenuConEmbedding();
+        } catch (errMenu) {
+            console.warn('[chat] No se pudieron cargar las opciones de menú:', errMenu.message);
+        }
+
+        // Capa 1: corrección léxica ligera contra el vocabulario de dominio,
+        // ANTES de generar el embedding (ver spellfix.js). No usa el LLM: es
+        // literal, así que no hay riesgo de que "reinterprete" la pregunta.
+        const vocabulario = spellfix.construirVocabulario(aprobadas, opcionesMenu);
+        const preguntaCorregida = spellfix.corregirTexto(preguntaNormalizada, vocabulario);
+        if (preguntaCorregida !== preguntaNormalizada) {
+            console.log('[chat] Spellfix: "%s" -> "%s"', preguntaNormalizada, preguntaCorregida);
+        }
+
+        const embeddingPregunta = await ollama.generarEmbedding(preguntaCorregida);
+
+        let mejorOpcionMenu = null;
+        try {
             mejorOpcionMenu = buscarMasParecido(embeddingPregunta, opcionesMenu);
         } catch (errMenu) {
             console.warn('[chat] No se pudieron comparar las opciones de menú:', errMenu.message);
         }
 
-        // Nivel 2: caché semántico (tabla "aprobadas")
-        const aprobadas = await store.listAprobadas();
-        const coincidencia = buscarMasParecido(embeddingPregunta, aprobadas);
+        /**
+         * Resuelve la opción de menú a ofrecer para una respuesta de caché (ya sea
+         * un match fuerte de Nivel 2, o uno "de zona gris" de Capa 3): primero por
+         * los tags de la aprobada (exacto o semántico, ver encontrarOpcionMenuPorTags);
+         * si eso no resuelve nada (tags vacíos, mal puestos, o de una aprobada
+         * duplicada sin tagear), cae a comparar la pregunta directo contra el menú
+         * (mejorOpcionMenu, ya calculado arriba), igual que hace Nivel 3.
+         */
+        async function resolverMenuOpcion(tags) {
+            const porTag = await encontrarOpcionMenuPorTags(tags, opcionesMenu);
+            if (porTag) return porTag;
+            if (mejorOpcionMenu && mejorOpcionMenu.score >= config.menuMentionThreshold) {
+                return mejorOpcionMenu.item;
+            }
+            return null;
+        }
+
+        // Nivel 2: caché semántico (tabla "aprobadas"). Capa 2: en vez de solo
+        // coseno, se usa un score híbrido (coseno + similitud léxica) para que
+        // un typo chico no tumbe el match por debajo del umbral.
+        const coincidencia = buscarMasParecidoHibrido(embeddingPregunta, preguntaCorregida, aprobadas);
 
         if (coincidencia && coincidencia.score >= config.similarityThreshold) {
             await store.incrementUso(coincidencia.item.id);
             const tags = coincidencia.item.tags || [];
-            // Si algún tag corresponde (exacto o semánticamente, ver encontrarOpcionMenuPorTags)
-            // a una opción real del menú, se manda su id: así el frontend puede ofrecer "¿esta
-            // opción es lo que buscabas?" y, si dice que sí, llevar directo a esa opción y
-            // ejecutarla. Si el tag es texto libre que no corresponde a ninguna opción real,
-            // no se manda (el frontend hace el fallback de solo mostrarlo como dato informativo).
-            const menuOpcion = await encontrarOpcionMenuPorTags(tags, opcionesMenu);
+            // Si algún tag corresponde (exacto o semánticamente) a una opción real del
+            // menú, o si la pregunta se parece lo suficiente al menú directamente, se
+            // manda su id: así el frontend puede ofrecer "¿esta opción es lo que
+            // buscabas?" y, si dice que sí, llevar directo a esa opción y ejecutarla.
+            const menuOpcion = await resolverMenuOpcion(tags);
 
             return res.json({
                 respuesta: coincidencia.item.respuesta,
                 fuente: 'cache_semantico',
                 similitud: Number(coincidencia.score.toFixed(4)),
+                similitud_coseno: Number(coincidencia.coseno.toFixed(4)),
+                similitud_lexica: Number(coincidencia.lexica.toFixed(4)),
                 pendiente_revision: false,
+                tags,
+                menu_opcion: menuOpcion ? { id: menuOpcion.id, ruta: menuOpcion.ruta, label: menuOpcion.label, icono: menuOpcion.icono || '' } : null
+            });
+        }
+
+        // Capa 3: "zona gris". Lo bastante parecido como para sugerirlo, pero
+        // no como para servirlo automático como si fuera la misma pregunta.
+        // En vez de gastar una llamada al LLM y crear un pendiente duplicado
+        // en la cola de revisión, se devuelve como sugerencia para que el
+        // frontend pueda ofrecer un "¿quisiste decir...?" antes de generar
+        // una respuesta nueva. También se resuelve menu_opcion aquí (antes no
+        // se hacía, y por eso preguntas cortas y sin typo -que igual caían en
+        // esta zona gris por no matchear ninguna aprobada al 0.86+- nunca
+        // ofrecían el botón del menú aunque el parecido con el menú fuera alto).
+        if (coincidencia && coincidencia.score >= config.cacheZonaGrisMin) {
+            const tags = coincidencia.item.tags || [];
+            const menuOpcion = await resolverMenuOpcion(tags);
+
+            return res.json({
+                respuesta: coincidencia.item.respuesta,
+                fuente: 'sugerencia_revision',
+                similitud: Number(coincidencia.score.toFixed(4)),
+                similitud_coseno: Number(coincidencia.coseno.toFixed(4)),
+                similitud_lexica: Number(coincidencia.lexica.toFixed(4)),
+                pendiente_revision: false,
+                pregunta_sugerida: coincidencia.item.pregunta,
                 tags,
                 menu_opcion: menuOpcion ? { id: menuOpcion.id, ruta: menuOpcion.ruta, label: menuOpcion.label, icono: menuOpcion.icono || '' } : null
             });

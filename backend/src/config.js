@@ -33,6 +33,18 @@ const config = {
 
     menuMentionThreshold: parseFloat(required('MENU_MENTION_THRESHOLD', '0.55')),
 
+    // --- Precisión semántica ante errores gramaticales/ortográficos chicos ---
+    // Capa 1 (spellfix.js): corrección léxica antes de embeber.
+    spellfixMinLongitudPalabra: parseInt(required('SPELLFIX_MIN_WORD_LENGTH', '4'), 10),
+    spellfixMaxDistancia: parseInt(required('SPELLFIX_MAX_DISTANCE', '2'), 10),
+    // Capa 2 (similarity.js): score híbrido = coseno + similitud léxica.
+    // Peso de la parte léxica (0 a 1); el resto del peso lo lleva el coseno.
+    pesoLexicoHibrido: parseFloat(required('HYBRID_LEXICAL_WEIGHT', '0.25')),
+    // Capa 3 (routes/chat.js): "zona gris" de sugerencia. Si el score híbrido
+    // cae entre este valor y SIMILARITY_THRESHOLD, no se sirve como caché
+    // automático ni se manda al LLM: se devuelve como sugerencia a confirmar.
+    cacheZonaGrisMin: parseFloat(required('CACHE_GRAY_ZONE_MIN', '0.75')),
+
     // Sensibles: sin fallback, deben venir de .env sí o sí
     adminPassword: requiredSecret('ADMIN_PASSWORD'),
     sessionSecret: requiredSecret('SESSION_SECRET'),
